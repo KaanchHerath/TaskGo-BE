@@ -36,3 +36,21 @@ export const loginUser = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+export const getProfile = async (req, res) => {
+    try {
+        console.log('REQ.USER:', req.user); // DEBUG
+        let user = null;
+        if (req.user && req.user._id) {
+            user = await User.findById(req.user._id).select('-password');
+        } else if (req.user && req.user.email) {
+            user = await User.findOne({ email: req.user.email }).select('-password');
+        }
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.json(user);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};

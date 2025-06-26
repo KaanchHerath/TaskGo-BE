@@ -1,20 +1,270 @@
-import Tasker from "../models/Tasker.js";
+import User from "../models/User.js";
+import Task from "../models/Task.js";
+import Application from "../models/Application.js";
+import mongoose from 'mongoose';
 
+// @desc    Get all taskers with filtering, pagination, and sorting
+// @route   GET /api/v1/taskers
+// @access  Public
 export const getAllTaskers = async (req, res) => {
     try {
-        const taskers = await Tasker.find();
-        res.json(taskers);
+        const {
+            page = 1,
+            limit = 12,
+            skills,
+            area,
+            minRating,
+            maxHourlyRate,
+            sortBy = 'rating.average',
+            sortOrder = 'desc',
+            search
+        } = req.query;
+
+        // Build query for taskers
+        const query = { role: "tasker" };
+        
+        // Filter by skills
+        if (skills) {
+            const skillsArray = Array.isArray(skills) ? skills : [skills];
+            query['taskerProfile.skills'] = { $in: skillsArray };
+        }
+        
+        // Filter by area
+        if (area) {
+            query['taskerProfile.area'] = area;
+        }
+        
+        // Filter by minimum rating
+        if (minRating) {
+            query['rating.average'] = { $gte: Number(minRating) };
+        }
+        
+        // Search in name or skills
+        if (search) {
+            query.$or = [
+                { fullName: { $regex: search, $options: 'i' } },
+                { 'taskerProfile.skills': { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Calculate pagination
+        const skip = (page - 1) * limit;
+        
+        // Build sort object
+        const sort = {};
+        sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+        // Get taskers with pagination
+        const taskers = await User.find(query)
+            .select("-password")
+            .sort(sort)
+            .skip(skip)
+            .limit(Number(limit));
+
+        // Get total count for pagination
+        const total = await User.countDocuments(query);
+
+        // Enhance taskers with additional statistics
+        const enhancedTaskers = await Promise.all(
+            taskers.map(async (tasker) => {
+                // Get completed tasks count
+                const completedTasks = await Task.countDocuments({
+                    selectedTasker: tasker._id,
+                    status: 'completed'
+                });
+
+                // Get average response time (in hours) - mock for now
+                const avgResponseTime = Math.floor(Math.random() * 4) + 1; // 1-4 hours
+
+                // Calculate hourly rate based on completed tasks (mock calculation)
+                const baseRate = 15 + (tasker.rating?.average || 0) * 5;
+                const experienceBonus = Math.min(completedTasks * 0.5, 15);
+                const hourlyRate = Math.round(baseRate + experienceBonus);
+
+                return {
+                    ...tasker.toObject(),
+                    completedTasks,
+                    avgResponseTime,
+                    hourlyRate,
+                    isOnline: Math.random() > 0.3, // Mock online status
+                    responseRate: Math.min(95 + Math.floor(Math.random() * 5), 100) // 95-100%
+                };
+            })
+        );
+
+        res.status(200).json({
+            success: true,
+            data: enhancedTaskers,
+            pagination: {
+                page: Number(page),
+                limit: Number(limit),
+                total,
+                pages: Math.ceil(total / limit)
+            }
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error('Get all taskers error:', error);
+        res.status(500).json({ 
+            success: false,
+            message: "Server error while fetching taskers" 
+        });
+    }
+};
+
+// @desc    Get top rated taskers
+// @route   GET /api/v1/taskers/top-rated
+// @access  Public
+export const getTopRatedTaskers = async (req, res) => {
+    try {
+        const { limit = 6 } = req.query;
+
+        const topTaskers = await User.find({ 
+            role: "tasker",
+            'rating.count': { $gte: 1 } // Only taskers with at least 1 rating
+        })
+            .select("-password")
+            .sort({ 'rating.average': -1, 'rating.count': -1 })
+            .limit(Number(limit));
+
+        // Enhance with additional data
+        const enhancedTaskers = await Promise.all(
+            topTaskers.map(async (tasker) => {
+                const completedTasks = await Task.countDocuments({
+                    selectedTasker: tasker._id,
+                    status: 'completed'
+                });
+
+                const avgResponseTime = Math.floor(Math.random() * 4) + 1;
+                const baseRate = 15 + (tasker.rating?.average || 0) * 5;
+                const experienceBonus = Math.min(completedTasks * 0.5, 15);
+                const hourlyRate = Math.round(baseRate + experienceBonus);
+
+                return {
+                    ...tasker.toObject(),
+                    completedTasks,
+                    avgResponseTime,
+                    hourlyRate,
+                    isOnline: Math.random() > 0.3,
+                    responseRate: Math.min(95 + Math.floor(Math.random() * 5), 100)
+                };
+            })
+        );
+
+        res.status(200).json({
+            success: true,
+            data: enhancedTaskers
+        });
+    } catch (error) {
+        console.error('Get top rated taskers error:', error);
+        res.status(500).json({ 
+            success: false,
+            message: "Server error while fetching top rated taskers" 
+        });
+    }
+};
+
+// @desc    Get tasker by ID with detailed information
+// @route   GET /api/v1/taskers/:id
+// @access  Public
+export const getTaskerById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid tasker ID'
+            });
+        }
+
+        const tasker = await User.findOne({ _id: id, role: "tasker" })
+            .select("-password");
+
+        if (!tasker) {
+            return res.status(404).json({
+                success: false,
+                message: 'Tasker not found'
+            });
+        }
+
+        // Get detailed statistics
+        const completedTasks = await Task.countDocuments({
+            selectedTasker: tasker._id,
+            status: 'completed'
+        });
+
+        const activeTasks = await Task.countDocuments({
+            selectedTasker: tasker._id,
+            status: { $in: ['scheduled', 'active'] }
+        });
+
+        const totalApplications = await Application.countDocuments({
+            tasker: tasker._id
+        });
+
+        // Calculate additional metrics
+        const avgResponseTime = Math.floor(Math.random() * 4) + 1;
+        const baseRate = 15 + (tasker.rating?.average || 0) * 5;
+        const experienceBonus = Math.min(completedTasks * 0.5, 15);
+        const hourlyRate = Math.round(baseRate + experienceBonus);
+
+        const enhancedTasker = {
+            ...tasker.toObject(),
+            completedTasks,
+            activeTasks,
+            totalApplications,
+            avgResponseTime,
+            hourlyRate,
+            isOnline: Math.random() > 0.3,
+            responseRate: Math.min(95 + Math.floor(Math.random() * 5), 100)
+        };
+
+        res.status(200).json({
+            success: true,
+            data: enhancedTasker
+        });
+    } catch (error) {
+        console.error('Get tasker by ID error:', error);
+        res.status(500).json({ 
+            success: false,
+            message: "Server error while fetching tasker" 
+        });
     }
 };
 
 export const updateTaskerAvailability = async (req, res) => {
-    const { availability } = req.body;
+    const { isAvailable, availableHours } = req.body;
     try {
-        const tasker = await Tasker.findByIdAndUpdate(req.user.id, { availability }, { new: true });
-        res.json(tasker);
+        const updateData = {
+            'taskerProfile.isAvailable': isAvailable
+        };
+        
+        if (availableHours) {
+            updateData['taskerProfile.availableHours'] = availableHours;
+        }
+        
+        const tasker = await User.findByIdAndUpdate(
+            req.user._id, 
+            updateData, 
+            { new: true }
+        ).select("-password");
+        
+        if (!tasker) {
+            return res.status(404).json({ 
+                success: false,
+                message: "Tasker not found" 
+            });
+        }
+        
+        res.json({
+            success: true,
+            data: tasker
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error('Update tasker availability error:', error);
+        res.status(500).json({ 
+            success: false,
+            message: "Server error while updating availability" 
+        });
     }
-};
+}; 
