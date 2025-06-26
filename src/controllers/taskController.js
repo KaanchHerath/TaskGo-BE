@@ -21,6 +21,26 @@ export const createTask = async (req, res) => {
       customer: req.user._id
     };
 
+    // Handle targeted tasks
+    if (req.body.targetedTasker) {
+      // Validate that the targeted tasker exists and is actually a tasker
+      const targetedUser = await User.findById(req.body.targetedTasker);
+      if (!targetedUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Targeted tasker not found'
+        });
+      }
+      if (targetedUser.role !== 'tasker') {
+        return res.status(400).json({
+          success: false,
+          message: 'Targeted user is not a tasker'
+        });
+      }
+      taskData.isTargeted = true;
+      taskData.targetedTasker = req.body.targetedTasker;
+    }
+
     const task = await Task.create(taskData);
     
     // Increment customer's tasks posted count
@@ -71,7 +91,20 @@ export const getTasks = async (req, res) => {
 
     // Build query - only show active tasks to public
     // Scheduled tasks are hidden from all users except customer and selectedTasker
+    // Targeted tasks are only visible to the targeted tasker
     const query = { status: 'active', startDate: { $gt: new Date() } };
+    
+    // If user is authenticated, check for targeted tasks
+    if (req.user && req.user.role === 'tasker') {
+      // For taskers, show non-targeted tasks OR tasks targeted to them
+      query.$or = [
+        { isTargeted: false },
+        { isTargeted: true, targetedTasker: req.user._id }
+      ];
+    } else {
+      // For non-authenticated users or customers, only show non-targeted tasks
+      query.isTargeted = false;
+    }
     
     if (category) query.category = category;
     if (area) query.area = area;
@@ -139,7 +172,8 @@ export const getTask = async (req, res) => {
 
     const task = await Task.findById(req.params.id)
       .populate('customer', 'fullName email phone rating statistics')
-      .populate('selectedTasker', 'fullName email phone rating statistics taskerProfile');
+      .populate('selectedTasker', 'fullName email phone rating statistics taskerProfile')
+      .populate('targetedTasker', 'fullName email phone rating statistics taskerProfile');
 
     if (!task) {
       return res.status(404).json({
@@ -151,7 +185,26 @@ export const getTask = async (req, res) => {
     // Updated access permissions based on task status
     if (task.status === 'active') {
       // Active tasks are visible to all users (public access)
-      // No authentication required
+      // However, targeted tasks should only be visible to customer and targeted tasker
+      if (task.isTargeted) {
+        if (!req.user) {
+          return res.status(401).json({
+            success: false,
+            message: 'Authentication required to view this targeted task'
+          });
+        }
+
+        const isCustomer = req.user._id.toString() === task.customer._id.toString();
+        const isTargetedTasker = task.targetedTasker && 
+                                 req.user._id.toString() === task.targetedTasker._id.toString();
+
+        if (!isCustomer && !isTargetedTasker) {
+          return res.status(403).json({
+            success: false,
+            message: 'Access denied. This is a private task.'
+          });
+        }
+      }
     } else if (task.status === 'scheduled') {
       // Scheduled tasks are only visible to customer and selectedTasker
       if (!req.user) {
@@ -164,11 +217,13 @@ export const getTask = async (req, res) => {
       const isCustomer = req.user._id.toString() === task.customer._id.toString();
       const isSelectedTasker = task.selectedTasker && 
                                req.user._id.toString() === task.selectedTasker._id.toString();
+      const isTargetedTasker = task.targetedTasker && 
+                               req.user._id.toString() === task.targetedTasker._id.toString();
 
-      if (!isCustomer && !isSelectedTasker) {
+      if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         return res.status(403).json({
           success: false,
-          message: 'Access denied. Only the customer and selected tasker can view scheduled tasks.'
+          message: 'Access denied. Only the customer and selected/targeted tasker can view scheduled tasks.'
         });
       }
     } else {
@@ -183,8 +238,10 @@ export const getTask = async (req, res) => {
       const isCustomer = req.user._id.toString() === task.customer._id.toString();
       const isSelectedTasker = task.selectedTasker && 
                                req.user._id.toString() === task.selectedTasker._id.toString();
+      const isTargetedTasker = task.targetedTasker && 
+                               req.user._id.toString() === task.targetedTasker._id.toString();
 
-      if (!isCustomer && !isSelectedTasker) {
+      if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         return res.status(403).json({
           success: false,
           message: 'Access denied. Only task participants can view this task.'
@@ -454,8 +511,11 @@ export const selectTasker = async (req, res) => {
       });
     }
 
+    // Check if this is a targeted task
+    const isTargetedTask = task.isTargeted && task.targetedTasker && task.targetedTasker.toString() === taskerId;
+    
     // Find the tasker's application for this task
-    const application = await Application.findOne({
+    let application = await Application.findOne({
       task: req.params.id,
       tasker: taskerId,
       status: 'pending'
@@ -509,7 +569,7 @@ export const selectTasker = async (req, res) => {
       application.status = 'confirmed';
       await application.save({ session });
 
-      // Reject all other applications
+      // Reject all other applications (if any exist for this task)
       await Application.updateMany(
         { 
           task: req.params.id, 
@@ -523,8 +583,9 @@ export const selectTasker = async (req, res) => {
       await session.commitTransaction();
 
       // Populate and return updated task
-      await task.populate('selectedTasker', 'fullName email phone taskerProfile rating statistics');
-      await task.populate('customer', 'fullName email');
+          await task.populate('selectedTasker', 'fullName email phone taskerProfile rating statistics');
+    await task.populate('targetedTasker', 'fullName email phone taskerProfile rating statistics');
+    await task.populate('customer', 'fullName email');
 
       res.status(200).json({
         success: true,
@@ -645,25 +706,49 @@ export const confirmTime = async (req, res) => {
       });
     }
 
-    // Find the tasker's application for this task
-    const application = await Application.findOne({
-      task: req.params.id,
-      tasker: req.user._id
-    });
-
-    if (!application) {
-      return res.status(404).json({
-        success: false,
-        message: 'You have not applied for this task'
+    // Check if this is a targeted task where the current user is the targeted tasker
+    const isTargetedTasker = task.isTargeted && task.targetedTasker && task.targetedTasker.toString() === req.user._id.toString();
+    
+    let application;
+    
+    if (isTargetedTasker) {
+      // For targeted tasks, create an application if it doesn't exist
+      application = await Application.findOne({
+        task: req.params.id,
+        tasker: req.user._id
       });
-    }
-
-    // Check if application can be confirmed by tasker
-    if (!application.canBeConfirmedByTasker()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Application cannot be confirmed (either already confirmed or not pending)'
+      
+      if (!application) {
+        // Create a new application for the targeted tasker
+        application = await Application.create({
+          task: req.params.id,
+          tasker: req.user._id,
+          proposedPayment: confirmedPayment, // Use confirmed payment as proposed payment
+          note: 'Direct hire application',
+          status: 'pending'
+        });
+      }
+    } else {
+      // For regular tasks, find the existing application
+      application = await Application.findOne({
+        task: req.params.id,
+        tasker: req.user._id
       });
+
+      if (!application) {
+        return res.status(404).json({
+          success: false,
+          message: 'You have not applied for this task'
+        });
+      }
+
+      // Check if application can be confirmed by tasker
+      if (!application.canBeConfirmedByTasker()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Application cannot be confirmed (either already confirmed or not pending)'
+        });
+      }
     }
 
     // Update the application
@@ -744,6 +829,7 @@ export const confirmSchedule = async (req, res) => {
 
     await task.populate('customer', 'fullName email phone');
     await task.populate('selectedTasker', 'fullName email phone');
+    await task.populate('targetedTasker', 'fullName email phone');
 
     res.status(200).json({
       success: true,
@@ -818,6 +904,7 @@ export const completeTask = async (req, res) => {
 
     await task.populate('customer', 'fullName email');
     await task.populate('selectedTasker', 'fullName email phone');
+    await task.populate('targetedTasker', 'fullName email phone');
 
     res.status(200).json({
       success: true,
@@ -880,6 +967,7 @@ export const taskerCompleteTask = async (req, res) => {
 
     await task.populate('customer', 'fullName email phone');
     await task.populate('selectedTasker', 'fullName email phone');
+    await task.populate('targetedTasker', 'fullName email phone');
 
     res.status(200).json({
       success: true,
@@ -982,56 +1070,289 @@ export const getTasksByCustomerId = async (req, res) => {
 
     // Build query
     const query = { customer: customerId };
-    if (status) {
-      query.status = status;
-    }
+    if (status) query.status = status;
 
     // Calculate pagination
     const skip = (page - 1) * limit;
 
-    // Get tasks with pagination
+    // Execute query
     const tasks = await Task.find(query)
-      .populate('customer', 'fullName email rating statistics')
       .populate('selectedTasker', 'fullName email rating statistics')
+      .populate('targetedTasker', 'fullName email rating statistics')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
-
-    // Manually populate application count for each task
-    const tasksWithApplicationCount = await Promise.all(
-      tasks.map(async (task) => {
-        const applicationCount = await Application.countDocuments({ task: task._id });
-        return {
-          ...task.toObject(),
-          applicationCount
-        };
-      })
-    );
 
     const total = await Task.countDocuments(query);
 
     res.status(200).json({
       success: true,
-      data: tasksWithApplicationCount,
+      data: tasks,
       pagination: {
         page: Number(page),
         limit: Number(limit),
         total,
         pages: Math.ceil(total / limit)
-      },
-      customer: {
-        _id: customer._id,
-        fullName: customer.fullName,
-        email: customer.email,
-        rating: customer.rating,
-        statistics: customer.statistics
       }
     });
   } catch (error) {
     console.error('Get tasks by customer ID error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error while fetching customer tasks'
+      message: 'Server error while fetching tasks'
+    });
+  }
+};
+
+// @desc    Mark scheduled task as completed
+// @route   POST /api/v1/tasks/:id/mark-complete
+// @access  Private (Customer or selected tasker only)
+export const markTaskComplete = async (req, res) => {
+  try {
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid task ID'
+      });
+    }
+
+    const { rating, review, completionPhotos, completionNotes, taskerFeedback, taskerRatingForCustomer } = req.body;
+
+    const task = await Task.findById(req.params.id);
+    
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
+
+    // Verify user is customer or selected tasker or targeted tasker
+    const isCustomer = task.customer.toString() === req.user._id.toString();
+    const isSelectedTasker = task.selectedTasker && task.selectedTasker.toString() === req.user._id.toString();
+    const isTargetedTasker = task.targetedTasker && task.targetedTasker.toString() === req.user._id.toString();
+    
+    if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only the customer or selected/targeted tasker can mark task as complete.'
+      });
+    }
+
+    // Verify task is scheduled
+    if (task.status !== 'scheduled') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only scheduled tasks can be marked as complete'
+      });
+    }
+
+    // Handle customer completion
+    if (isCustomer) {
+      if (rating) task.customerRating = rating;
+      if (review) task.customerReview = review;
+      task.customerCompletedAt = new Date();
+    }
+    
+    // Handle tasker completion
+    if (isSelectedTasker || isTargetedTasker) {
+      if (completionPhotos && completionPhotos.length > 0) {
+        task.completionPhotos = completionPhotos;
+      }
+      if (completionNotes) task.completionNotes = completionNotes;
+      if (taskerFeedback) task.taskerFeedback = taskerFeedback;
+      if (taskerRatingForCustomer) task.taskerRatingForCustomer = taskerRatingForCustomer;
+      task.taskerCompletedAt = new Date();
+    }
+
+    // Check if both parties have completed
+    const bothCompleted = task.taskerCompletedAt && task.customerCompletedAt;
+    
+    if (bothCompleted) {
+      task.status = 'completed';
+      
+      // Update statistics for both users
+      const workingTaskerId = task.selectedTasker || task.targetedTasker;
+      if (workingTaskerId) {
+        const tasker = await User.findById(workingTaskerId);
+        if (tasker) {
+          await tasker.incrementTaskStat('tasksCompleted');
+          
+          // Update tasker's rating if customer provided one
+          if (task.customerRating) {
+            await tasker.updateRating(task.customerRating);
+          }
+        }
+      }
+
+      // Update customer's completed tasks statistics and rating
+      const customer = await User.findById(task.customer);
+      if (customer) {
+        await customer.incrementTaskStat('tasksCompleted');
+        
+        // Update customer's rating if tasker provided one
+        if (task.taskerRatingForCustomer) {
+          await customer.updateRating(task.taskerRatingForCustomer);
+        }
+      }
+    }
+
+    await task.save();
+
+    // Populate for response
+    await task.populate('customer', 'fullName email phone');
+    await task.populate('selectedTasker', 'fullName email phone');
+    await task.populate('targetedTasker', 'fullName email phone');
+
+    const message = bothCompleted 
+      ? 'Task completed successfully by both parties!' 
+      : isCustomer 
+        ? 'Task marked as complete by customer. Waiting for tasker confirmation.'
+        : 'Task marked as complete by tasker. Waiting for customer confirmation.';
+
+    res.status(200).json({
+      success: true,
+      message,
+      data: task,
+      bothCompleted
+    });
+  } catch (error) {
+    console.error('Mark task complete error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while marking task as complete'
+    });
+  }
+};
+
+// @desc    Cancel scheduled task
+// @route   POST /api/v1/tasks/:id/cancel-schedule
+// @access  Private (Customer or selected tasker only)
+export const cancelScheduledTask = async (req, res) => {
+  try {
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid task ID'
+      });
+    }
+
+    const { reason } = req.body;
+
+    const task = await Task.findById(req.params.id);
+    
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
+
+    // Verify user is customer or selected tasker or targeted tasker
+    const isCustomer = task.customer.toString() === req.user._id.toString();
+    const isSelectedTasker = task.selectedTasker && task.selectedTasker.toString() === req.user._id.toString();
+    const isTargetedTasker = task.targetedTasker && task.targetedTasker.toString() === req.user._id.toString();
+    
+    if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only the customer or selected/targeted tasker can cancel the schedule.'
+      });
+    }
+
+    // Verify task is scheduled
+    if (task.status !== 'scheduled') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only scheduled tasks can be cancelled'
+      });
+    }
+
+    // Update task status back to active and clear scheduling details
+    task.status = 'active';
+    task.selectedTasker = null;
+    task.agreedTime = null;
+    task.agreedPayment = null;
+    task.taskerConfirmed = false;
+    
+    // Add cancellation details
+    task.cancellationReason = reason;
+    task.cancelledBy = req.user._id;
+    task.cancelledAt = new Date();
+
+    await task.save();
+
+    // Populate for response
+    await task.populate('customer', 'fullName email phone');
+
+    res.status(200).json({
+      success: true,
+      message: 'Schedule cancelled successfully. Task is now active again.',
+      data: task
+    });
+  } catch (error) {
+    console.error('Cancel scheduled task error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while cancelling schedule'
+    });
+  }
+};
+
+// @desc    Upload completion photos
+// @route   POST /api/v1/tasks/upload-completion-photo
+// @access  Private (Taskers only)
+export const uploadCompletionPhoto = async (req, res) => {
+  try {
+    // For now, we'll create a simple mock upload that converts the file to a data URL
+    // In production, you'd upload to AWS S3, Cloudinary, or similar service
+    
+    if (!req.files || !req.files.photo) {
+      return res.status(400).json({
+        success: false,
+        message: 'No photo file provided'
+      });
+    }
+
+    const photo = req.files.photo;
+    
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(photo.mimetype)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.'
+      });
+    }
+
+    // Validate file size (10MB limit)
+    if (photo.size > 10 * 1024 * 1024) {
+      return res.status(400).json({
+        success: false,
+        message: 'File too large. Maximum size is 10MB.'
+      });
+    }
+
+    // For now, create a data URL (in production, upload to cloud storage)
+    const base64 = photo.data.toString('base64');
+    const dataUrl = `data:${photo.mimetype};base64,${base64}`;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        url: dataUrl,
+        filename: photo.name,
+        size: photo.size,
+        mimetype: photo.mimetype
+      }
+    });
+  } catch (error) {
+    console.error('Upload completion photo error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while uploading photo'
     });
   }
 }; 

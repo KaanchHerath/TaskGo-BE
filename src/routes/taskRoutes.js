@@ -10,6 +10,9 @@ import {
   confirmSchedule,
   completeTask,
   taskerCompleteTask,
+  markTaskComplete,
+  cancelScheduledTask,
+  uploadCompletionPhoto,
   getMyTasks,
   getMyApplications,
   getTasksByCustomerId
@@ -45,5 +48,8 @@ router.post('/:id/confirm-time', confirmTime);
 router.post('/:id/confirm-schedule', confirmSchedule);
 router.post('/:id/complete', completeTask);
 router.post('/:id/tasker-complete', taskerCompleteTask);
+router.post('/:id/mark-complete', markTaskComplete);
+router.post('/:id/cancel-schedule', cancelScheduledTask);
+router.post('/upload-completion-photo', uploadCompletionPhoto);
 
 export default router; 

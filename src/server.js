@@ -2,6 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors";
+import fileUpload from "express-fileupload";
 import jobRequestRoutes from "./routes/jobRequests.js";
 import authRoutes from "./routes/auth.js";
 import statsRoutes from "./routes/statsRoutes.js";
@@ -26,7 +27,16 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json());
+// File upload middleware
+app.use(fileUpload({
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  abortOnLimit: true,
+  responseOnLimit: "File size limit has been reached"
+}));
+
+// Increase JSON body parser limits to handle large base64 images
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Request/Response Logging Middleware
 app.use((req, res, next) => {

@@ -48,20 +48,21 @@ export const sendMessage = async (req, res) => {
     // Check if the user has permission to chat about this task
     const isCustomer = task.customer.toString() === req.user._id.toString();
     const isSelectedTasker = task.selectedTasker && task.selectedTasker.toString() === req.user._id.toString();
+    const isTargetedTasker = task.isTargeted && task.targetedTasker && task.targetedTasker.toString() === req.user._id.toString();
     
     // Updated access control based on task status
     if (task.status === 'scheduled') {
-      // For scheduled tasks, only customer and selectedTasker can chat
-      if (!isCustomer && !isSelectedTasker) {
+      // For scheduled tasks, only customer, selectedTasker, and targetedTasker can chat
+      if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         return res.status(403).json({
           success: false,
           message: 'Only the customer and selected tasker can chat about scheduled tasks'
         });
       }
     } else if (task.status === 'active') {
-      // For active tasks, customer and any applied tasker can chat
+      // For active tasks, customer, any applied tasker, and targetedTasker can chat
       let hasApplied = false;
-      if (!isCustomer && !isSelectedTasker) {
+      if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         const application = await Application.findOne({
           task: taskId,
           tasker: req.user._id
@@ -69,7 +70,7 @@ export const sendMessage = async (req, res) => {
         hasApplied = !!application;
       }
 
-      if (!isCustomer && !isSelectedTasker && !hasApplied) {
+      if (!isCustomer && !isSelectedTasker && !isTargetedTasker && !hasApplied) {
         return res.status(403).json({
           success: false,
           message: 'You can only chat about tasks you are involved in'
@@ -78,7 +79,7 @@ export const sendMessage = async (req, res) => {
     } else {
       // For other statuses, maintain existing logic
       let hasApplied = false;
-      if (!isCustomer && !isSelectedTasker) {
+      if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         const application = await Application.findOne({
           task: taskId,
           tasker: req.user._id
@@ -86,7 +87,7 @@ export const sendMessage = async (req, res) => {
         hasApplied = !!application;
       }
 
-      if (!isCustomer && !isSelectedTasker && !hasApplied) {
+      if (!isCustomer && !isSelectedTasker && !isTargetedTasker && !hasApplied) {
         return res.status(403).json({
           success: false,
           message: 'You can only chat about tasks you are involved in'
@@ -97,11 +98,12 @@ export const sendMessage = async (req, res) => {
     // Verify the receiver is involved in this task
     const receiverIsCustomer = task.customer.toString() === receiverId;
     const receiverIsSelectedTasker = task.selectedTasker && task.selectedTasker.toString() === receiverId;
+    const receiverIsTargetedTasker = task.isTargeted && task.targetedTasker && task.targetedTasker.toString() === receiverId;
     
     // Updated receiver validation based on task status
     if (task.status === 'scheduled') {
-      // For scheduled tasks, only customer and selectedTasker can receive messages
-      if (!receiverIsCustomer && !receiverIsSelectedTasker) {
+      // For scheduled tasks, only customer, selectedTasker, and targetedTasker can receive messages
+      if (!receiverIsCustomer && !receiverIsSelectedTasker && !receiverIsTargetedTasker) {
         return res.status(400).json({
           success: false,
           message: 'Only the customer and selected tasker can receive messages for scheduled tasks'
@@ -110,7 +112,7 @@ export const sendMessage = async (req, res) => {
     } else {
       // For other statuses, check if receiver has applied or is involved
       let receiverHasApplied = false;
-      if (!receiverIsCustomer && !receiverIsSelectedTasker) {
+      if (!receiverIsCustomer && !receiverIsSelectedTasker && !receiverIsTargetedTasker) {
         const receiverApplication = await Application.findOne({
           task: taskId,
           tasker: receiverId
@@ -118,7 +120,7 @@ export const sendMessage = async (req, res) => {
         receiverHasApplied = !!receiverApplication;
       }
 
-      if (!receiverIsCustomer && !receiverIsSelectedTasker && !receiverHasApplied) {
+      if (!receiverIsCustomer && !receiverIsSelectedTasker && !receiverIsTargetedTasker && !receiverHasApplied) {
         return res.status(400).json({
           success: false,
           message: 'Receiver is not involved in this task'
@@ -184,20 +186,21 @@ export const getConversation = async (req, res) => {
     // Check if the authenticated user has permission to view this conversation
     const isCustomer = task.customer.toString() === req.user._id.toString();
     const isSelectedTasker = task.selectedTasker && task.selectedTasker.toString() === req.user._id.toString();
+    const isTargetedTasker = task.isTargeted && task.targetedTasker && task.targetedTasker.toString() === req.user._id.toString();
     
     // Updated access control based on task status
     if (task.status === 'scheduled') {
-      // For scheduled tasks, only customer and selectedTasker can access conversations
-      if (!isCustomer && !isSelectedTasker) {
+      // For scheduled tasks, only customer, selectedTasker, and targetedTasker can access conversations
+      if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         return res.status(403).json({
           success: false,
           message: 'Only the customer and selected tasker can view conversations for scheduled tasks'
         });
       }
     } else if (task.status === 'active') {
-      // For active tasks, customer and any applied tasker can access conversations
+      // For active tasks, customer, any applied tasker, and targetedTasker can access conversations
       let hasApplied = false;
-      if (!isCustomer && !isSelectedTasker) {
+      if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         const application = await Application.findOne({
           task: taskId,
           tasker: req.user._id
@@ -205,7 +208,7 @@ export const getConversation = async (req, res) => {
         hasApplied = !!application;
       }
 
-      if (!isCustomer && !isSelectedTasker && !hasApplied) {
+      if (!isCustomer && !isSelectedTasker && !isTargetedTasker && !hasApplied) {
         return res.status(403).json({
           success: false,
           message: 'You can only view conversations for tasks you are involved in'
@@ -214,7 +217,7 @@ export const getConversation = async (req, res) => {
     } else {
       // For other statuses, maintain existing logic
       let hasApplied = false;
-      if (!isCustomer && !isSelectedTasker) {
+      if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         const application = await Application.findOne({
           task: taskId,
           tasker: req.user._id
@@ -222,7 +225,7 @@ export const getConversation = async (req, res) => {
         hasApplied = !!application;
       }
 
-      if (!isCustomer && !isSelectedTasker && !hasApplied) {
+      if (!isCustomer && !isSelectedTasker && !isTargetedTasker && !hasApplied) {
         return res.status(403).json({
           success: false,
           message: 'You can only view conversations for tasks you are involved in'
@@ -233,11 +236,12 @@ export const getConversation = async (req, res) => {
     // Verify the other user is involved in this task
     const otherUserIsCustomer = task.customer.toString() === userId;
     const otherUserIsSelectedTasker = task.selectedTasker && task.selectedTasker.toString() === userId;
+    const otherUserIsTargetedTasker = task.isTargeted && task.targetedTasker && task.targetedTasker.toString() === userId;
     
     // Updated other user validation based on task status
     if (task.status === 'scheduled') {
-      // For scheduled tasks, only customer and selectedTasker can be conversation participants
-      if (!otherUserIsCustomer && !otherUserIsSelectedTasker) {
+      // For scheduled tasks, only customer, selectedTasker, and targetedTasker can be conversation participants
+      if (!otherUserIsCustomer && !otherUserIsSelectedTasker && !otherUserIsTargetedTasker) {
         return res.status(400).json({
           success: false,
           message: 'Only the customer and selected tasker can participate in conversations for scheduled tasks'
@@ -246,7 +250,7 @@ export const getConversation = async (req, res) => {
     } else {
       // For other statuses, check if other user has applied or is involved
       let otherUserHasApplied = false;
-      if (!otherUserIsCustomer && !otherUserIsSelectedTasker) {
+      if (!otherUserIsCustomer && !otherUserIsSelectedTasker && !otherUserIsTargetedTasker) {
         const otherUserApplication = await Application.findOne({
           task: taskId,
           tasker: userId
@@ -254,7 +258,7 @@ export const getConversation = async (req, res) => {
         otherUserHasApplied = !!otherUserApplication;
       }
 
-      if (!otherUserIsCustomer && !otherUserIsSelectedTasker && !otherUserHasApplied) {
+      if (!otherUserIsCustomer && !otherUserIsSelectedTasker && !otherUserIsTargetedTasker && !otherUserHasApplied) {
         return res.status(400).json({
           success: false,
           message: 'The specified user is not involved in this task'

@@ -136,11 +136,22 @@ const taskSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
+  targetedTasker: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  isTargeted: {
+    type: Boolean,
+    default: false
+  },
   completionPhotos: [{
     type: String,
     validate: {
       validator: function(value) {
-        return /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)$/i.test(value);
+        if (!value || value.trim() === '') return true; // Allow empty strings
+        // Allow http/https URLs, blob URLs, and data URLs
+        return /^(https?:\/\/.+\.(jpg|jpeg|png|gif|webp)|blob:http|data:image)/.test(value);
       },
       message: 'Invalid completion photo URL format'
     }
@@ -158,6 +169,39 @@ const taskSchema = new mongoose.Schema({
   taskerConfirmed: {
     type: Boolean,
     default: false
+  },
+  completionNotes: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Completion notes cannot exceed 500 characters']
+  },
+  taskerCompletedAt: {
+    type: Date
+  },
+  customerCompletedAt: {
+    type: Date
+  },
+  taskerFeedback: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Tasker feedback cannot exceed 500 characters']
+  },
+  taskerRatingForCustomer: {
+    type: Number,
+    min: 1,
+    max: 5
+  },
+  cancellationReason: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Cancellation reason cannot exceed 500 characters']
+  },
+  cancelledBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  cancelledAt: {
+    type: Date
   }
 }, {
   timestamps: true,
@@ -169,7 +213,9 @@ const taskSchema = new mongoose.Schema({
 taskSchema.index({ status: 1, area: 1 });
 taskSchema.index({ customer: 1, status: 1 });
 taskSchema.index({ selectedTasker: 1, status: 1 });
+taskSchema.index({ targetedTasker: 1, status: 1 });
 taskSchema.index({ category: 1, status: 1 });
+taskSchema.index({ isTargeted: 1, status: 1 });
 taskSchema.index({ createdAt: -1 });
 
 // Virtual for application count
@@ -229,6 +275,8 @@ taskSchema.statics.getActiveTasksInArea = function(area, limit = 10) {
     startDate: { $gt: new Date() }
   })
   .populate('customer', 'fullName email')
+  .populate('selectedTasker', 'fullName email phone')
+  .populate('targetedTasker', 'fullName email phone')
   .sort({ createdAt: -1 })
   .limit(limit);
 };
@@ -239,15 +287,25 @@ taskSchema.statics.getTasksByCustomer = function(customerId, status = null) {
   
   return this.find(query)
     .populate('selectedTasker', 'fullName email phone')
+    .populate('targetedTasker', 'fullName email phone')
     .sort({ createdAt: -1 });
 };
 
 taskSchema.statics.getTasksByTasker = function(taskerId, status = null) {
-  const query = { selectedTasker: taskerId };
-  if (status) query.status = status;
+  // Include both tasks where tasker is selected AND tasks targeted to this tasker
+  const baseQuery = {
+    $or: [
+      { selectedTasker: taskerId },
+      { targetedTasker: taskerId, isTargeted: true }
+    ]
+  };
+  
+  const query = status ? { ...baseQuery, status } : baseQuery;
   
   return this.find(query)
     .populate('customer', 'fullName email phone')
+    .populate('selectedTasker', 'fullName email phone')
+    .populate('targetedTasker', 'fullName email phone')
     .sort({ createdAt: -1 });
 };
 
