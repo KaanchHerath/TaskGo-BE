@@ -137,6 +137,29 @@ const userSchema = new mongoose.Schema({
       },
       trim: true
     },
+    bio: {
+      type: String,
+      trim: true,
+      maxlength: [1000, 'Bio cannot exceed 1000 characters']
+    },
+    experience: {
+      type: String,
+      trim: true,
+      enum: ['0-1 years', '1-3 years', '3-5 years', '5+ years']
+    },
+    hourlyRate: {
+      type: Number,
+      min: [0, 'Hourly rate cannot be negative']
+    },
+    isAvailable: {
+      type: Boolean,
+      default: true
+    },
+    advancePaymentAmount: {
+      type: Number,
+      min: [0, 'Advance payment amount cannot be negative'],
+      default: 0
+    },
     idDocument: {
       type: String, // URL or path to the document
       required: function() {
@@ -147,6 +170,18 @@ const userSchema = new mongoose.Schema({
       type: String // URL or path to the document
       // optional
     }]
+  },
+  // Customer specific fields
+  customerProfile: {
+    province: {
+      type: String,
+      trim: true
+    },
+    bio: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Bio cannot exceed 500 characters']
+    }
   }
 }, {
   timestamps: true,

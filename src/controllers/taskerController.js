@@ -20,8 +20,11 @@ export const getAllTaskers = async (req, res) => {
             search
         } = req.query;
 
-        // Build query for taskers
-        const query = { role: "tasker" };
+        // Build query for taskers (only show available taskers)
+        const query = { 
+            role: "tasker",
+            'taskerProfile.isAvailable': true 
+        };
         
         // Filter by skills
         if (skills) {
@@ -120,6 +123,7 @@ export const getTopRatedTaskers = async (req, res) => {
 
         const topTaskers = await User.find({ 
             role: "tasker",
+            'taskerProfile.isAvailable': true, // Only show available taskers
             'rating.count': { $gte: 1 } // Only taskers with at least 1 rating
         })
             .select("-password")
