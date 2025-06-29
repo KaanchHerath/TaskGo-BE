@@ -3,7 +3,6 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { rateLimit } from 'express-rate-limit';
-import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -58,19 +57,7 @@ const validatePhone = (phone) => {
   return phoneRegex.test(phone);
 };
 
-// Multer setup for tasker document uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadPath = path.join(__dirname, '../../uploads/tasker-docs');
-    fs.mkdirSync(uploadPath, { recursive: true });
-    cb(null, uploadPath);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
-  }
-});
-const upload = multer({ storage });
+
 
 router.post("/register", async (req, res) => {
   try {
@@ -248,13 +235,7 @@ router.post("/login", loginLimiter, async (req, res) => {
 });
 
 // Tasker registration endpoint
-router.post(
-  "/register-tasker",
-  upload.fields([
-    { name: 'idDocument', maxCount: 1 },
-    { name: 'qualificationDocuments', maxCount: 10 }
-  ]),
-  async (req, res) => {
+router.post("/register-tasker", async (req, res) => {
     try {
       const {
         email,
@@ -292,11 +273,39 @@ router.post(
         return res.status(400).json({ message: "User with this email or phone already exists" });
       }
 
-      // Handle file uploads
-      const idDocumentFile = req.files['idDocument']?.[0];
-      const qualificationFiles = req.files['qualificationDocuments'] || [];
-      if (!idDocumentFile) {
+      // Handle file uploads using express-fileupload
+      if (!req.files || !req.files.idDocument) {
         return res.status(400).json({ message: "ID Document is required" });
+      }
+
+      const idDocumentFile = req.files.idDocument;
+      const qualificationFiles = req.files.qualificationDocuments || [];
+
+      // Ensure qualificationFiles is an array
+      const qualificationFilesArray = Array.isArray(qualificationFiles) ? qualificationFiles : [qualificationFiles];
+
+      // Save files to disk
+      const uploadPath = path.join(__dirname, '../../uploads/tasker-docs');
+      fs.mkdirSync(uploadPath, { recursive: true });
+
+      // Save ID document
+      const idDocumentFileName = Date.now() + '-' + Math.round(Math.random() * 1E9) + '-' + idDocumentFile.name;
+      const idDocumentPath = path.join(uploadPath, idDocumentFileName);
+      await idDocumentFile.mv(idDocumentPath);
+
+      // Store relative path for database (for serving via /uploads route)
+      const idDocumentRelativePath = `uploads/tasker-docs/${idDocumentFileName}`;
+
+      // Save qualification documents
+      const qualificationPaths = [];
+      for (const file of qualificationFilesArray) {
+        if (file && file.name) {
+          const fileName = Date.now() + '-' + Math.round(Math.random() * 1E9) + '-' + file.name;
+          const filePath = path.join(uploadPath, fileName);
+          await file.mv(filePath);
+          // Store relative path for database
+          qualificationPaths.push(`uploads/tasker-docs/${fileName}`);
+        }
       }
       // Hash password
       const salt = await bcrypt.genSalt(10);
@@ -312,8 +321,8 @@ router.post(
           skills: Array.isArray(skills) ? skills : [skills],
           country,
           area,
-          idDocument: idDocumentFile.path,
-          qualificationDocuments: qualificationFiles.map(f => f.path)
+          idDocument: idDocumentRelativePath,
+          qualificationDocuments: qualificationPaths
         }
       });
       await user.save();

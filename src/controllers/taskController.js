@@ -1301,6 +1301,80 @@ export const cancelScheduledTask = async (req, res) => {
   }
 };
 
+// @desc    Upload task photos
+// @route   POST /api/v1/tasks/upload-photos
+// @access  Private (Customers only)
+export const uploadTaskPhotos = async (req, res) => {
+  try {
+    // Verify user is customer
+    if (req.user.role !== 'customer') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only customers can upload task photos'
+      });
+    }
+
+    if (!req.files || !req.files.photos) {
+      return res.status(400).json({
+        success: false,
+        message: 'No photos provided'
+      });
+    }
+
+    const photos = Array.isArray(req.files.photos) ? req.files.photos : [req.files.photos];
+    
+    if (photos.length > 5) {
+      return res.status(400).json({
+        success: false,
+        message: 'Maximum 5 photos allowed'
+      });
+    }
+
+    const uploadedPhotos = [];
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+
+    for (const photo of photos) {
+      // Validate file type
+      if (!allowedTypes.includes(photo.mimetype)) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid file type for ${photo.name}. Only JPEG, PNG, GIF, and WebP are allowed.`
+        });
+      }
+
+      // Validate file size (5MB limit per photo)
+      if (photo.size > 5 * 1024 * 1024) {
+        return res.status(400).json({
+          success: false,
+          message: `File ${photo.name} is too large. Maximum size is 5MB per photo.`
+        });
+      }
+
+      // For now, create a data URL (in production, upload to cloud storage)
+      const base64 = photo.data.toString('base64');
+      const dataUrl = `data:${photo.mimetype};base64,${base64}`;
+      
+      uploadedPhotos.push({
+        url: dataUrl,
+        filename: photo.name,
+        size: photo.size,
+        mimetype: photo.mimetype
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: uploadedPhotos
+    });
+  } catch (error) {
+    console.error('Upload task photos error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while uploading photos'
+    });
+  }
+};
+
 // @desc    Upload completion photos
 // @route   POST /api/v1/tasks/upload-completion-photo
 // @access  Private (Taskers only)
@@ -1353,6 +1427,64 @@ export const uploadCompletionPhoto = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while uploading photo'
+    });
+  }
+};
+
+// @desc    Get category statistics with task counts
+// @route   GET /api/v1/tasks/category-stats
+// @access  Public
+export const getCategoryStats = async (req, res) => {
+  try {
+    // Get task counts by category for active tasks only
+    const categoryStats = await Task.aggregate([
+      {
+        $match: {
+          status: 'active',
+          startDate: { $gt: new Date() },
+          isTargeted: false  // Only count non-targeted tasks for public stats
+        }
+      },
+      {
+        $group: {
+          _id: '$category',
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      }
+    ]);
+
+    // Transform the data into a more usable format
+    const categoryData = categoryStats.reduce((acc, item) => {
+      acc[item._id] = item.count;
+      return acc;
+    }, {});
+
+    // Define all possible categories with default count of 0
+    const allCategories = [
+      'Cleaning', 'Repairing', 'Handyman', 'Maintenance', 
+      'Gardening', 'Landscaping', 'Installations', 'Security',
+      'Moving', 'Plumbing', 'Electrical', 'Painting', 
+      'Carpentry', 'Repairs', 'Delivery', 'Other'
+    ];
+
+    // Ensure all categories are included with their counts
+    const result = allCategories.map(category => ({
+      category,
+      count: categoryData[category] || 0
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Get category stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching category statistics'
     });
   }
 }; 

@@ -12,10 +12,12 @@ import {
   taskerCompleteTask,
   markTaskComplete,
   cancelScheduledTask,
+  uploadTaskPhotos,
   uploadCompletionPhoto,
   getMyTasks,
   getMyApplications,
-  getTasksByCustomerId
+  getTasksByCustomerId,
+  getCategoryStats
 } from '../controllers/taskController.js';
 import { verifyToken, optionalAuth } from '../middleware/auth.js';
 
@@ -23,6 +25,7 @@ const router = express.Router();
 
 // Public routes
 router.get('/', getTasks);
+router.get('/category-stats', getCategoryStats);
 router.get('/customer/:customerId', getTasksByCustomerId);
 
 // Protected routes - specific user routes first to avoid conflicts
@@ -50,6 +53,7 @@ router.post('/:id/complete', completeTask);
 router.post('/:id/tasker-complete', taskerCompleteTask);
 router.post('/:id/mark-complete', markTaskComplete);
 router.post('/:id/cancel-schedule', cancelScheduledTask);
+router.post('/upload-photos', uploadTaskPhotos);
 router.post('/upload-completion-photo', uploadCompletionPhoto);
 
 export default router; 

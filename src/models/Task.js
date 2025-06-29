@@ -114,7 +114,8 @@ const taskSchema = new mongoose.Schema({
     validate: {
       validator: function(value) {
         if (!value || value.trim() === '') return true; // Allow empty strings
-        return /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)$/i.test(value);
+        // Allow http/https URLs and data URLs
+        return /^(https?:\/\/.+\.(jpg|jpeg|png|gif|webp)|data:image\/)/.test(value);
       },
       message: 'Invalid photo URL format'
     }

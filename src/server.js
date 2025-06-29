@@ -34,6 +34,9 @@ app.use(fileUpload({
   responseOnLimit: "File size limit has been reached"
 }));
 
+// Serve uploaded files
+app.use('/uploads', express.static('uploads'));
+
 // Increase JSON body parser limits to handle large base64 images
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));

@@ -3,6 +3,55 @@ import Task from "../models/Task.js";
 import Application from "../models/Application.js";
 import mongoose from 'mongoose';
 
+// Helper function to calculate response rate based on actual data
+const calculateResponseRate = async (taskerId) => {
+    try {
+        // Get total tasks the tasker has been involved with
+        const totalTasks = await Task.countDocuments({
+            $or: [
+                { selectedTasker: taskerId },
+                { targetedTasker: taskerId }
+            ]
+        });
+
+        // Get completed tasks
+        const completedTasks = await Task.countDocuments({
+            $or: [
+                { selectedTasker: taskerId, status: 'completed' },
+                { targetedTasker: taskerId, status: 'completed' }
+            ]
+        });
+
+        // Get applications (shows responsiveness to opportunities)
+        const totalApplications = await Application.countDocuments({
+            tasker: taskerId
+        });
+
+        if (totalTasks === 0 && totalApplications === 0) {
+            return 0; // New tasker with no activity
+        }
+
+        // Calculate response rate based on completion rate and activity
+        let responseRate = 0;
+        
+        if (totalTasks > 0) {
+            const completionRate = (completedTasks / totalTasks) * 100;
+            // Base response rate on completion rate
+            responseRate = Math.min(completionRate, 100);
+        }
+
+        // Boost response rate for active taskers (those who apply to jobs)
+        if (totalApplications > 0) {
+            responseRate = Math.max(responseRate, 85); // Minimum 85% for active taskers
+        }
+
+        return Math.round(responseRate);
+    } catch (error) {
+        console.error('Error calculating response rate:', error);
+        return 0;
+    }
+};
+
 // @desc    Get all taskers with filtering, pagination, and sorting
 // @route   GET /api/v1/taskers
 // @access  Public
@@ -84,13 +133,16 @@ export const getAllTaskers = async (req, res) => {
                 const experienceBonus = Math.min(completedTasks * 0.5, 15);
                 const hourlyRate = Math.round(baseRate + experienceBonus);
 
+                // Calculate real response rate
+                const responseRate = await calculateResponseRate(tasker._id);
+
                 return {
                     ...tasker.toObject(),
                     completedTasks,
                     avgResponseTime,
                     hourlyRate,
                     isOnline: Math.random() > 0.3, // Mock online status
-                    responseRate: Math.min(95 + Math.floor(Math.random() * 5), 100) // 95-100%
+                    responseRate
                 };
             })
         );
@@ -143,13 +195,16 @@ export const getTopRatedTaskers = async (req, res) => {
                 const experienceBonus = Math.min(completedTasks * 0.5, 15);
                 const hourlyRate = Math.round(baseRate + experienceBonus);
 
+                // Calculate real response rate
+                const responseRate = await calculateResponseRate(tasker._id);
+
                 return {
                     ...tasker.toObject(),
                     completedTasks,
                     avgResponseTime,
                     hourlyRate,
                     isOnline: Math.random() > 0.3,
-                    responseRate: Math.min(95 + Math.floor(Math.random() * 5), 100)
+                    responseRate
                 };
             })
         );
@@ -212,6 +267,9 @@ export const getTaskerById = async (req, res) => {
         const experienceBonus = Math.min(completedTasks * 0.5, 15);
         const hourlyRate = Math.round(baseRate + experienceBonus);
 
+        // Calculate real response rate
+        const responseRate = await calculateResponseRate(tasker._id);
+
         const enhancedTasker = {
             ...tasker.toObject(),
             completedTasks,
@@ -220,7 +278,7 @@ export const getTaskerById = async (req, res) => {
             avgResponseTime,
             hourlyRate,
             isOnline: Math.random() > 0.3,
-            responseRate: Math.min(95 + Math.floor(Math.random() * 5), 100)
+            responseRate
         };
 
         res.status(200).json({
@@ -328,6 +386,9 @@ export const getTaskerProfile = async (req, res) => {
         const experienceBonus = Math.min(completedTasks * 0.5, 15);
         const hourlyRate = Math.round(baseRate + experienceBonus);
 
+        // Calculate real response rate
+        const responseRate = await calculateResponseRate(tasker._id);
+
         const profileData = {
             ...tasker.toObject(),
             statistics: {
@@ -335,7 +396,7 @@ export const getTaskerProfile = async (req, res) => {
                 activeTasks,
                 totalApplications,
                 avgResponseTime,
-                responseRate: Math.min(95 + Math.floor(Math.random() * 5), 100)
+                responseRate
             },
             hourlyRate,
             isOnline: Math.random() > 0.3,
