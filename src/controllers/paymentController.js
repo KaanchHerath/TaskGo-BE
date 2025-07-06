@@ -65,6 +65,22 @@ export const initiateAdvancePayment = async (req, res) => {
       });
     }
 
+    // Check if task has a selected tasker
+    if (!task.selectedTasker) {
+      return res.status(400).json({
+        success: false,
+        message: 'No tasker has been selected for this task'
+      });
+    }
+
+    // Check if payment is already completed
+    if (task.advancePaymentStatus === 'paid') {
+      return res.status(400).json({
+        success: false,
+        message: 'Advance payment has already been completed for this task'
+      });
+    }
+
     // Calculate advance payment (20% of agreed payment)
     const advanceAmount = Math.round(task.agreedPayment * 0.2);
     
@@ -226,11 +242,34 @@ export const handlePaymentNotification = async (req, res) => {
         task.advancePaymentDate = new Date();
         task.status = 'scheduled';
         await task.save();
+        
+        console.log('Task scheduled after successful payment:', {
+          taskId: task._id,
+          orderId: order_id,
+          paymentId: payment_id
+        });
       }
     } else {
       // Payment failed
       payment.status = 'failed';
       payment.failureReason = status_message;
+      
+      // Reset task status if payment failed
+      const task = await Task.findById(payment.task);
+      if (task && task.status === 'active' && task.advancePaymentStatus === 'pending') {
+        // Keep task as active, but clear payment-related fields
+        task.advancePaymentStatus = null;
+        task.advancePayment = null;
+        task.paymentId = null;
+        // Note: We keep selectedTasker and agreedPayment so customer can retry payment
+        await task.save();
+        
+        console.log('Task reset to active after payment failure:', {
+          taskId: task._id,
+          orderId: order_id,
+          failureReason: status_message
+        });
+      }
     }
 
     await payment.save();
@@ -272,11 +311,28 @@ export const handlePaymentCancel = async (req, res) => {
   try {
     const { order_id } = req.query;
     
-    // Update payment status to cancelled
-    await Payment.findOneAndUpdate(
-      { payhereOrderId: order_id },
-      { status: 'cancelled' }
-    );
+    // Find the payment and update its status
+    const payment = await Payment.findOne({ payhereOrderId: order_id });
+    if (payment) {
+      payment.status = 'cancelled';
+      await payment.save();
+
+      // Reset task status back to active if payment was cancelled
+      const task = await Task.findById(payment.task);
+      if (task && task.status === 'active' && task.advancePaymentStatus === 'pending') {
+        // Keep task as active, but clear payment-related fields
+        task.advancePaymentStatus = null;
+        task.advancePayment = null;
+        task.paymentId = null;
+        // Note: We keep selectedTasker and agreedPayment so customer can retry payment
+        await task.save();
+        
+        console.log('Task reset to active after payment cancellation:', {
+          taskId: task._id,
+          orderId: order_id
+        });
+      }
+    }
 
     res.redirect(`${process.env.FRONTEND_URL}/payment/cancelled?order_id=${order_id}`);
 
