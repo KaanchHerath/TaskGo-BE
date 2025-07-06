@@ -16,8 +16,17 @@ const __dirname = path.dirname(__filename);
 // Rate limiter for login attempts
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per window
-  message: { message: "Too many login attempts, please try again after 15 minutes" }
+  max: 10, // 10 attempts per window (increased from 5)
+  message: { message: "Too many login attempts, please try again after 15 minutes" },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  handler: (req, res) => {
+    res.status(429).json({
+      message: "Too many login attempts, please try again after 15 minutes",
+      retryAfter: Math.ceil(15 * 60 / 1000), // seconds
+      error: "RATE_LIMIT_EXCEEDED"
+    });
+  }
 });
 
 // Password strength validation
@@ -186,6 +195,21 @@ router.post("/register", async (req, res) => {
     console.error('Registration error:', error);
     res.status(500).json({ message: "An error occurred during registration" });
   }
+});
+
+// Rate limit reset endpoint (for development/testing only)
+router.post("/reset-rate-limit", (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ message: "Rate limit reset not available in production" });
+  }
+  
+  // Clear the rate limit store for the current IP
+  const key = `rl:login:${req.ip}`;
+  if (loginLimiter.store && loginLimiter.store.resetKey) {
+    loginLimiter.store.resetKey(key);
+  }
+  
+  res.json({ message: "Rate limit reset successfully" });
 });
 
 router.post("/login", loginLimiter, async (req, res) => {
