@@ -12,6 +12,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import taskerRoutes from './routes/taskerRoutes.js';
 import feedbackRoutes from './routes/feedbackRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
 import { verifyToken, authorize } from "./middleware/auth.js";
 import path from 'path';
 
@@ -151,7 +152,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/stats", statsRoutes);
 
 // Task routes - v1 API
-app.use("/api/v1/tasks", taskRoutes);
+app.use("/api/tasks", taskRoutes);
 
 // Jobs routes - GET is public, other operations are protected
 app.use("/api/jobs", (req, res, next) => {
@@ -169,13 +170,16 @@ app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Tasker routes - mixed access (some public, some protected)
-app.use('/api/v1/taskers', taskerRoutes);
+app.use('/api/taskers', taskerRoutes);
 
 // Feedback routes - mixed access (some public, some protected)
-app.use('/api/v1/feedback', feedbackRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // Chat routes - all protected
-app.use('/api/v1/chat', chatRoutes);
+app.use('/api/chat', chatRoutes);
+
+// Payment routes - mixed access (some public for callbacks, some protected)
+app.use('/api/payments', paymentRoutes);
 
 // Add error handling middleware (add this before the app.listen)
 app.use((err, req, res, next) => {

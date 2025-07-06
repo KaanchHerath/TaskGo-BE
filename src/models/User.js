@@ -123,14 +123,14 @@ const userSchema = new mongoose.Schema({
         message: 'At least one skill is required for taskers'
       }
     },
-    country: {
+    province: {
       type: String,
       required: function() {
         return this.role === 'tasker';
       },
       trim: true
     },
-    area: {
+    district: {
       type: String,
       required: function() {
         return this.role === 'tasker';

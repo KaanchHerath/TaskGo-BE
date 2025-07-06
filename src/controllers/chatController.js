@@ -4,7 +4,7 @@ import Task from '../models/Task.js';
 import Application from '../models/Application.js';
 
 // @desc    Send a new chat message
-// @route   POST /api/v1/chat
+// @route   POST /api/chat
 // @access  Private
 export const sendMessage = async (req, res) => {
   try {
@@ -159,7 +159,7 @@ export const sendMessage = async (req, res) => {
 };
 
 // @desc    Get conversation between two users for a specific task
-// @route   GET /api/v1/chat/:taskId/:userId
+// @route   GET /api/chat/:taskId/:userId
 // @access  Private
 export const getConversation = async (req, res) => {
   try {
@@ -329,7 +329,7 @@ export const getConversation = async (req, res) => {
 };
 
 // @desc    Get unread message count for the authenticated user
-// @route   GET /api/v1/chat/unread-count
+// @route   GET /api/chat/unread-count
 // @access  Private
 export const getUnreadCount = async (req, res) => {
   try {
@@ -355,7 +355,7 @@ export const getUnreadCount = async (req, res) => {
 };
 
 // @desc    Mark messages as read for a specific task
-// @route   PUT /api/v1/chat/:taskId/mark-read
+// @route   PUT /api/chat/:taskId/mark-read
 // @access  Private
 export const markMessagesAsRead = async (req, res) => {
   try {

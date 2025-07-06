@@ -203,6 +203,33 @@ const taskSchema = new mongoose.Schema({
   },
   cancelledAt: {
     type: Date
+  },
+  // Payment related fields
+  advancePayment: {
+    type: Number,
+    min: [0, 'Advance payment cannot be negative']
+  },
+  advancePaymentStatus: {
+    type: String,
+    enum: {
+      values: ['pending', 'paid', 'released', 'refunded'],
+      message: 'Invalid advance payment status'
+    },
+    default: 'pending'
+  },
+  advancePaymentDate: {
+    type: Date
+  },
+  advancePaymentReleasedAt: {
+    type: Date
+  },
+  paymentId: {
+    type: String,
+    trim: true
+  },
+  paymentReference: {
+    type: String,
+    trim: true
   }
 }, {
   timestamps: true,

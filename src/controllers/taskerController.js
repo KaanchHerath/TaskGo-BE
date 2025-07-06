@@ -53,7 +53,7 @@ const calculateResponseRate = async (taskerId) => {
 };
 
 // @desc    Get all taskers with filtering, pagination, and sorting
-// @route   GET /api/v1/taskers
+// @route   GET /api/taskers
 // @access  Public
 export const getAllTaskers = async (req, res) => {
     try {
@@ -61,7 +61,8 @@ export const getAllTaskers = async (req, res) => {
             page = 1,
             limit = 12,
             skills,
-            area,
+            province,
+            district,
             minRating,
             maxHourlyRate,
             sortBy = 'rating.average',
@@ -81,9 +82,14 @@ export const getAllTaskers = async (req, res) => {
             query['taskerProfile.skills'] = { $in: skillsArray };
         }
         
-        // Filter by area
-        if (area) {
-            query['taskerProfile.area'] = area;
+        // Filter by province
+        if (province) {
+            query['taskerProfile.province'] = province;
+        }
+        
+        // Filter by district
+        if (district) {
+            query['taskerProfile.district'] = district;
         }
         
         // Filter by minimum rating
@@ -167,7 +173,7 @@ export const getAllTaskers = async (req, res) => {
 };
 
 // @desc    Get top rated taskers
-// @route   GET /api/v1/taskers/top-rated
+// @route   GET /api/taskers/top-rated
 // @access  Public
 export const getTopRatedTaskers = async (req, res) => {
     try {
@@ -223,7 +229,7 @@ export const getTopRatedTaskers = async (req, res) => {
 };
 
 // @desc    Get tasker by ID with detailed information
-// @route   GET /api/v1/taskers/:id
+// @route   GET /api/taskers/:id
 // @access  Public
 export const getTaskerById = async (req, res) => {
     try {
@@ -332,7 +338,7 @@ export const updateTaskerAvailability = async (req, res) => {
 };
 
 // @desc    Get tasker profile with detailed information
-// @route   GET /api/v1/taskers/:id/profile
+// @route   GET /api/taskers/:id/profile
 // @access  Public
 export const getTaskerProfile = async (req, res) => {
     try {
@@ -423,7 +429,7 @@ export const getTaskerProfile = async (req, res) => {
 };
 
 // @desc    Get tasker reviews and feedback from customers
-// @route   GET /api/v1/taskers/:id/reviews
+// @route   GET /api/taskers/:id/reviews
 // @access  Public
 export const getTaskerReviews = async (req, res) => {
     try {

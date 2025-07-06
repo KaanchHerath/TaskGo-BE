@@ -85,7 +85,7 @@ describe('Task Management API', () => {
     await mongoose.connection.close();
   });
 
-  describe('POST /api/v1/tasks', () => {
+  describe('POST /api/tasks', () => {
     test('Should create a new task successfully (customer)', async () => {
       const taskData = {
         title: 'Plumbing Service Needed',
@@ -101,7 +101,7 @@ describe('Task Management API', () => {
       };
 
       const response = await request(app)
-        .post('/api/v1/tasks')
+        .post('/api/tasks')
         .set('Authorization', `Bearer ${customerToken}`)
         .send(taskData)
         .expect(201);
@@ -124,7 +124,7 @@ describe('Task Management API', () => {
       };
 
       const response = await request(app)
-        .post('/api/v1/tasks')
+        .post('/api/tasks')
         .set('Authorization', `Bearer ${customerToken}`)
         .send(invalidTaskData)
         .expect(400);
@@ -145,7 +145,7 @@ describe('Task Management API', () => {
       };
 
       const response = await request(app)
-        .post('/api/v1/tasks')
+        .post('/api/tasks')
         .set('Authorization', `Bearer ${taskerToken}`)
         .send(taskData)
         .expect(403);
@@ -166,16 +166,16 @@ describe('Task Management API', () => {
       };
 
       await request(app)
-        .post('/api/v1/tasks')
+        .post('/api/tasks')
         .send(taskData)
         .expect(401);
     });
   });
 
-  describe('GET /api/v1/tasks', () => {
+  describe('GET /api/tasks', () => {
     test('Should get all active tasks', async () => {
       const response = await request(app)
-        .get('/api/v1/tasks')
+        .get('/api/tasks')
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -185,7 +185,7 @@ describe('Task Management API', () => {
 
     test('Should filter tasks by category', async () => {
       const response = await request(app)
-        .get('/api/v1/tasks?category=Plumbing')
+        .get('/api/tasks?category=Plumbing')
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -196,7 +196,7 @@ describe('Task Management API', () => {
 
     test('Should filter tasks by area', async () => {
       const response = await request(app)
-        .get('/api/v1/tasks?area=Colombo')
+        .get('/api/tasks?area=Colombo')
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -207,7 +207,7 @@ describe('Task Management API', () => {
 
     test('Should paginate results', async () => {
       const response = await request(app)
-        .get('/api/v1/tasks?page=1&limit=5')
+        .get('/api/tasks?page=1&limit=5')
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -216,10 +216,10 @@ describe('Task Management API', () => {
     });
   });
 
-  describe('GET /api/v1/tasks/:id', () => {
+  describe('GET /api/tasks/:id', () => {
     test('Should get single active task (public access)', async () => {
       const response = await request(app)
-        .get(`/api/v1/tasks/${testTask._id}`)
+        .get(`/api/tasks/${testTask._id}`)
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -230,7 +230,7 @@ describe('Task Management API', () => {
       const fakeId = new mongoose.Types.ObjectId();
       
       const response = await request(app)
-        .get(`/api/v1/tasks/${fakeId}`)
+        .get(`/api/tasks/${fakeId}`)
         .expect(404);
 
       expect(response.body.success).toBe(false);
@@ -239,7 +239,7 @@ describe('Task Management API', () => {
 
     test('Should return 400 for invalid task ID', async () => {
       const response = await request(app)
-        .get('/api/v1/tasks/invalid-id')
+        .get('/api/tasks/invalid-id')
         .expect(400);
 
       expect(response.body.success).toBe(false);
@@ -247,7 +247,7 @@ describe('Task Management API', () => {
     });
   });
 
-  describe('POST /api/v1/tasks/:id/apply', () => {
+  describe('POST /api/tasks/:id/apply', () => {
     test('Should allow tasker to apply for task', async () => {
       const applicationData = {
         proposedPayment: 75,
@@ -258,7 +258,7 @@ describe('Task Management API', () => {
       };
 
       const response = await request(app)
-        .post(`/api/v1/tasks/${testTask._id}/apply`)
+        .post(`/api/tasks/${testTask._id}/apply`)
         .set('Authorization', `Bearer ${taskerToken}`)
         .send(applicationData)
         .expect(201);
@@ -277,7 +277,7 @@ describe('Task Management API', () => {
       };
 
       const response = await request(app)
-        .post(`/api/v1/tasks/${testTask._id}/apply`)
+        .post(`/api/tasks/${testTask._id}/apply`)
         .set('Authorization', `Bearer ${taskerToken}`)
         .send(applicationData)
         .expect(400);
@@ -293,7 +293,7 @@ describe('Task Management API', () => {
       };
 
       const response = await request(app)
-        .post(`/api/v1/tasks/${testTask._id}/apply`)
+        .post(`/api/tasks/${testTask._id}/apply`)
         .set('Authorization', `Bearer ${customerToken}`)
         .send(applicationData)
         .expect(403);
@@ -325,7 +325,7 @@ describe('Task Management API', () => {
       };
 
       const response = await request(app)
-        .post(`/api/v1/tasks/${testTask._id}/apply`)
+        .post(`/api/tasks/${testTask._id}/apply`)
         .set('Authorization', `Bearer ${anotherTaskerToken}`)
         .send(applicationData)
         .expect(400);
@@ -334,10 +334,10 @@ describe('Task Management API', () => {
     });
   });
 
-  describe('GET /api/v1/tasks/:id/applications', () => {
+  describe('GET /api/tasks/:id/applications', () => {
     test('Should allow task owner to view applications', async () => {
       const response = await request(app)
-        .get(`/api/v1/tasks/${testTask._id}/applications`)
+        .get(`/api/tasks/${testTask._id}/applications`)
         .set('Authorization', `Bearer ${customerToken}`)
         .expect(200);
 
@@ -348,7 +348,7 @@ describe('Task Management API', () => {
 
     test('Should prevent non-owner from viewing applications', async () => {
       const response = await request(app)
-        .get(`/api/v1/tasks/${testTask._id}/applications`)
+        .get(`/api/tasks/${testTask._id}/applications`)
         .set('Authorization', `Bearer ${taskerToken}`)
         .expect(403);
 
@@ -357,7 +357,7 @@ describe('Task Management API', () => {
     });
   });
 
-  describe('POST /api/v1/tasks/:id/select-tasker', () => {
+  describe('POST /api/tasks/:id/select-tasker', () => {
     test('Should allow customer to select tasker', async () => {
       const selectionData = {
         applicationId: testApplication._id,
@@ -365,7 +365,7 @@ describe('Task Management API', () => {
       };
 
       const response = await request(app)
-        .post(`/api/v1/tasks/${testTask._id}/select-tasker`)
+        .post(`/api/tasks/${testTask._id}/select-tasker`)
         .set('Authorization', `Bearer ${customerToken}`)
         .send(selectionData)
         .expect(200);
@@ -398,7 +398,7 @@ describe('Task Management API', () => {
       };
 
       const response = await request(app)
-        .post(`/api/v1/tasks/${anotherTask._id}/select-tasker`)
+        .post(`/api/tasks/${anotherTask._id}/select-tasker`)
         .set('Authorization', `Bearer ${taskerToken}`)
         .send(selectionData)
         .expect(403);
@@ -408,10 +408,10 @@ describe('Task Management API', () => {
     });
   });
 
-  describe('POST /api/v1/tasks/:id/confirm-schedule', () => {
+  describe('POST /api/tasks/:id/confirm-schedule', () => {
     test('Should allow selected tasker to confirm schedule', async () => {
       const response = await request(app)
-        .post(`/api/v1/tasks/${testTask._id}/confirm-schedule`)
+        .post(`/api/tasks/${testTask._id}/confirm-schedule`)
         .set('Authorization', `Bearer ${taskerToken}`)
         .expect(200);
 
@@ -440,7 +440,7 @@ describe('Task Management API', () => {
       );
 
       const response = await request(app)
-        .post(`/api/v1/tasks/${testTask._id}/confirm-schedule`)
+        .post(`/api/tasks/${testTask._id}/confirm-schedule`)
         .set('Authorization', `Bearer ${anotherTaskerToken}`)
         .expect(403);
 
@@ -449,7 +449,7 @@ describe('Task Management API', () => {
     });
   });
 
-  describe('POST /api/v1/tasks/:id/tasker-complete', () => {
+  describe('POST /api/tasks/:id/tasker-complete', () => {
     test('Should allow selected tasker to mark task complete', async () => {
       const completionData = {
         completionPhotos: ['https://example.com/completion1.jpg'],
@@ -457,7 +457,7 @@ describe('Task Management API', () => {
       };
 
       const response = await request(app)
-        .post(`/api/v1/tasks/${testTask._id}/tasker-complete`)
+        .post(`/api/tasks/${testTask._id}/tasker-complete`)
         .set('Authorization', `Bearer ${taskerToken}`)
         .send(completionData)
         .expect(200);
@@ -483,7 +483,7 @@ describe('Task Management API', () => {
       );
 
       const response = await request(app)
-        .post(`/api/v1/tasks/${testTask._id}/tasker-complete`)
+        .post(`/api/tasks/${testTask._id}/tasker-complete`)
         .set('Authorization', `Bearer ${anotherTaskerToken}`)
         .expect(403);
 
@@ -492,7 +492,7 @@ describe('Task Management API', () => {
     });
   });
 
-  describe('POST /api/v1/tasks/:id/complete', () => {
+  describe('POST /api/tasks/:id/complete', () => {
     test('Should allow customer to complete task with rating', async () => {
       const completionData = {
         rating: 5,
@@ -500,7 +500,7 @@ describe('Task Management API', () => {
       };
 
       const response = await request(app)
-        .post(`/api/v1/tasks/${testTask._id}/complete`)
+        .post(`/api/tasks/${testTask._id}/complete`)
         .set('Authorization', `Bearer ${customerToken}`)
         .send(completionData)
         .expect(200);
@@ -538,7 +538,7 @@ describe('Task Management API', () => {
       };
 
       const response = await request(app)
-        .post(`/api/v1/tasks/${anotherTask._id}/complete`)
+        .post(`/api/tasks/${anotherTask._id}/complete`)
         .set('Authorization', `Bearer ${taskerToken}`)
         .send(completionData)
         .expect(403);
@@ -548,10 +548,10 @@ describe('Task Management API', () => {
     });
   });
 
-  describe('GET /api/v1/tasks/user/my-tasks', () => {
+  describe('GET /api/tasks/user/my-tasks', () => {
     test('Should get customer\'s tasks', async () => {
       const response = await request(app)
-        .get('/api/v1/tasks/user/my-tasks')
+        .get('/api/tasks/user/my-tasks')
         .set('Authorization', `Bearer ${customerToken}`)
         .expect(200);
 
@@ -562,7 +562,7 @@ describe('Task Management API', () => {
 
     test('Should get tasker\'s tasks', async () => {
       const response = await request(app)
-        .get('/api/v1/tasks/user/my-tasks')
+        .get('/api/tasks/user/my-tasks')
         .set('Authorization', `Bearer ${taskerToken}`)
         .expect(200);
 
@@ -572,7 +572,7 @@ describe('Task Management API', () => {
 
     test('Should filter tasks by status', async () => {
       const response = await request(app)
-        .get('/api/v1/tasks/user/my-tasks?status=completed')
+        .get('/api/tasks/user/my-tasks?status=completed')
         .set('Authorization', `Bearer ${customerToken}`)
         .expect(200);
 
@@ -583,10 +583,10 @@ describe('Task Management API', () => {
     });
   });
 
-  describe('GET /api/v1/tasks/user/my-applications', () => {
+  describe('GET /api/tasks/user/my-applications', () => {
     test('Should get tasker\'s applications', async () => {
       const response = await request(app)
-        .get('/api/v1/tasks/user/my-applications')
+        .get('/api/tasks/user/my-applications')
         .set('Authorization', `Bearer ${taskerToken}`)
         .expect(200);
 
@@ -597,7 +597,7 @@ describe('Task Management API', () => {
 
     test('Should prevent customer from viewing applications', async () => {
       const response = await request(app)
-        .get('/api/v1/tasks/user/my-applications')
+        .get('/api/tasks/user/my-applications')
         .set('Authorization', `Bearer ${customerToken}`)
         .expect(403);
 
@@ -607,7 +607,7 @@ describe('Task Management API', () => {
 
     test('Should filter applications by status', async () => {
       const response = await request(app)
-        .get('/api/v1/tasks/user/my-applications?status=confirmed')
+        .get('/api/tasks/user/my-applications?status=confirmed')
         .set('Authorization', `Bearer ${taskerToken}`)
         .expect(200);
 
@@ -622,7 +622,7 @@ describe('Task Management API', () => {
     test('Should handle server errors gracefully', async () => {
       // Mock a server error by using invalid ObjectId
       const response = await request(app)
-        .get('/api/v1/tasks/invalid-object-id')
+        .get('/api/tasks/invalid-object-id')
         .expect(400);
 
       expect(response.body.success).toBe(false);
@@ -631,7 +631,7 @@ describe('Task Management API', () => {
 
     test('Should require authentication for protected routes', async () => {
       const response = await request(app)
-        .post('/api/v1/tasks')
+        .post('/api/tasks')
         .send({
           title: 'Test Task',
           category: 'Cleaning',

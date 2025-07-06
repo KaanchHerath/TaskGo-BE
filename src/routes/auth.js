@@ -243,12 +243,12 @@ router.post("/register-tasker", async (req, res) => {
         fullName,
         phone,
         skills,
-        country,
-        area
+        province,
+        district
       } = req.body;
       
       // Validate required fields
-      if (!email || !password || !fullName || !phone || !skills || !country || !area) {
+      if (!email || !password || !fullName || !phone || !skills || !province || !district) {
         return res.status(400).json({ message: "All fields are required" });
       }
 
@@ -319,8 +319,8 @@ router.post("/register-tasker", async (req, res) => {
         phone,
         taskerProfile: {
           skills: Array.isArray(skills) ? skills : [skills],
-          country,
-          area,
+          province,
+          district,
           idDocument: idDocumentRelativePath,
           qualificationDocuments: qualificationPaths
         }

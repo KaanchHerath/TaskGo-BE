@@ -21,8 +21,8 @@ const taskerData = {
   confirmPassword: 'TestPass123!',
   fullName: 'Test Tasker2',
   skills: 'plumbing',
-  country: 'TestCountry',
-  area: 'TestArea'
+  province: 'TestProvince',
+  district: 'TestDistrict'
 };
 
 const __filename = fileURLToPath(import.meta.url);
@@ -49,8 +49,8 @@ describe('Auth API', () => {
       .field('confirmPassword', taskerData.confirmPassword)
       .field('fullName', taskerData.fullName)
       .field('skills', taskerData.skills)
-      .field('country', taskerData.country)
-      .field('area', taskerData.area)
+      .field('province', taskerData.province)
+      .field('district', taskerData.district)
       .attach('idDocument', path.join(fixturesDir, 'id.pdf'))
       .attach('qualificationDocuments', path.join(fixturesDir, 'qual.pdf'));
     expect(res.statusCode).toBe(201);
@@ -67,8 +67,8 @@ describe('Auth API', () => {
       .field('confirmPassword', 'WrongPass123!')
       .field('fullName', 'Test Tasker3')
       .field('skills', 'plumbing')
-      .field('country', 'TestCountry')
-      .field('area', 'TestArea')
+      .field('province', 'TestProvince')
+      .field('district', 'TestDistrict')
       .attach('idDocument', path.join(fixturesDir, 'id.pdf'))
       .attach('qualificationDocuments', path.join(fixturesDir, 'qual.pdf'));
     expect(res.statusCode).toBe(400);
@@ -81,7 +81,7 @@ describe('Auth API', () => {
       .field('email', 'tasker4@example.com')
       .field('password', 'TestPass123!')
       .field('confirmPassword', 'TestPass123!')
-      // missing fullName, skills, country, area
+      // missing fullName, skills, province, district
       .attach('idDocument', path.join(fixturesDir, 'id.pdf'))
       .attach('qualificationDocuments', path.join(fixturesDir, 'qual.pdf'));
     expect(res.statusCode).toBe(400);
@@ -96,8 +96,8 @@ describe('Auth API', () => {
       .field('confirmPassword', 'TestPass123!')
       .field('fullName', 'Test Tasker5')
       .field('skills', 'plumbing')
-      .field('country', 'TestCountry')
-      .field('area', 'TestArea')
+      .field('province', 'TestProvince')
+      .field('district', 'TestDistrict')
       // no idDocument
       .attach('qualificationDocuments', path.join(fixturesDir, 'qual.pdf'));
     expect(res.statusCode).toBe(400);

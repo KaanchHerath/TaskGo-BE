@@ -1,1 +1,0 @@
-{"info":{"name":"TaskGo API Collection","description":"Complete API collection for TaskGo platform"},"variable":[{"key":"base_url","value":"http://localhost:5000"},{"key":"jwt_token","value":""}],"item":[]}

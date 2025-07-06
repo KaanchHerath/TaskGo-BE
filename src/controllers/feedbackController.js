@@ -4,7 +4,7 @@ import User from '../models/User.js';
 import mongoose from 'mongoose';
 
 // @desc    Create feedback
-// @route   POST /api/v1/feedback
+// @route   POST /api/feedback
 // @access  Private
 export const createFeedback = async (req, res) => {
   try {
@@ -122,7 +122,7 @@ export const createFeedback = async (req, res) => {
 };
 
 // @desc    Get feedback for a user
-// @route   GET /api/v1/feedback/user/:userId
+// @route   GET /api/feedback/user/:userId
 // @access  Public
 export const getUserFeedback = async (req, res) => {
   try {
@@ -174,7 +174,7 @@ export const getUserFeedback = async (req, res) => {
 };
 
 // @desc    Get feedback given by a user
-// @route   GET /api/v1/feedback/given
+// @route   GET /api/feedback/given
 // @access  Private
 export const getFeedbackGivenByUser = async (req, res) => {
   try {
@@ -204,7 +204,7 @@ export const getFeedbackGivenByUser = async (req, res) => {
 };
 
 // @desc    Get feedback for a specific task
-// @route   GET /api/v1/feedback/task/:taskId
+// @route   GET /api/feedback/task/:taskId
 // @access  Private
 export const getTaskFeedback = async (req, res) => {
   try {
@@ -253,7 +253,7 @@ export const getTaskFeedback = async (req, res) => {
 };
 
 // @desc    Add response to feedback
-// @route   POST /api/v1/feedback/:feedbackId/response
+// @route   POST /api/feedback/:feedbackId/response
 // @access  Private
 export const addFeedbackResponse = async (req, res) => {
   try {
@@ -311,7 +311,7 @@ export const addFeedbackResponse = async (req, res) => {
 };
 
 // @desc    Vote feedback as helpful
-// @route   POST /api/v1/feedback/:feedbackId/helpful
+// @route   POST /api/feedback/:feedbackId/helpful
 // @access  Private
 export const voteFeedbackHelpful = async (req, res) => {
   try {
@@ -357,7 +357,7 @@ export const voteFeedbackHelpful = async (req, res) => {
 };
 
 // @desc    Report feedback
-// @route   POST /api/v1/feedback/:feedbackId/report
+// @route   POST /api/feedback/:feedbackId/report
 // @access  Private
 export const reportFeedback = async (req, res) => {
   try {
@@ -409,7 +409,7 @@ export const reportFeedback = async (req, res) => {
 };
 
 // @desc    Get user rating summary
-// @route   GET /api/v1/feedback/rating-summary/:userId
+// @route   GET /api/feedback/rating-summary/:userId
 // @access  Public
 export const getUserRatingSummary = async (req, res) => {
   try {

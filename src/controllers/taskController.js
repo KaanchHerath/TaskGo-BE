@@ -4,7 +4,7 @@ import User from '../models/User.js';
 import mongoose from 'mongoose';
 
 // @desc    Create new task
-// @route   POST /api/v1/tasks
+// @route   POST /api/tasks
 // @access  Private (Customer only)
 export const createTask = async (req, res) => {
   try {
@@ -74,7 +74,7 @@ export const createTask = async (req, res) => {
 };
 
 // @desc    Get all active tasks
-// @route   GET /api/v1/tasks
+// @route   GET /api/tasks
 // @access  Public (only shows active tasks - scheduled tasks are hidden from public view)
 export const getTasks = async (req, res) => {
   try {
@@ -129,9 +129,15 @@ export const getTasks = async (req, res) => {
     const tasksWithApplicationCount = await Promise.all(
       tasks.map(async (task) => {
         const applicationCount = await Application.countDocuments({ task: task._id });
+        let hasApplied = false;
+        if (req.user && req.user.role === 'tasker') {
+          const application = await Application.findOne({ task: task._id, tasker: req.user._id });
+          hasApplied = !!application;
+        }
         return {
           ...task.toObject(),
-          applicationCount
+          applicationCount,
+          hasApplied
         };
       })
     );
@@ -158,7 +164,7 @@ export const getTasks = async (req, res) => {
 };
 
 // @desc    Get single task
-// @route   GET /api/v1/tasks/:id
+// @route   GET /api/tasks/:id
 // @access  Public (for active tasks), Private (for scheduled/other statuses)
 export const getTask = async (req, res) => {
   try {
@@ -251,9 +257,15 @@ export const getTask = async (req, res) => {
 
     // Manually populate application count
     const applicationCount = await Application.countDocuments({ task: task._id });
+    let hasApplied = false;
+    if (req.user && req.user.role === 'tasker') {
+      const application = await Application.findOne({ task: task._id, tasker: req.user._id });
+      hasApplied = !!application;
+    }
     const taskWithApplicationCount = {
       ...task.toObject(),
-      applicationCount
+      applicationCount,
+      hasApplied
     };
 
     res.status(200).json({
@@ -278,7 +290,7 @@ export const getTask = async (req, res) => {
 };
 
 // @desc    Apply for task
-// @route   POST /api/v1/tasks/:id/apply
+// @route   POST /api/tasks/:id/apply
 // @access  Private (Tasker only)
 export const applyForTask = async (req, res) => {
   try {
@@ -379,7 +391,7 @@ export const applyForTask = async (req, res) => {
 };
 
 // @desc    Get applications for task
-// @route   GET /api/v1/tasks/:id/applications
+// @route   GET /api/tasks/:id/applications
 // @access  Private (Task owner only)
 export const getTaskApplications = async (req, res) => {
   try {
@@ -440,7 +452,7 @@ export const getTaskApplications = async (req, res) => {
 };
 
 // @desc    Select tasker for task
-// @route   POST /api/v1/tasks/:id/select-tasker
+// @route   POST /api/tasks/:id/select-tasker
 // @access  Private (Task owner only)
 export const selectTasker = async (req, res) => {
   try {
@@ -558,11 +570,11 @@ export const selectTasker = async (req, res) => {
     session.startTransaction();
 
     try {
-      // Update task
+      // Update task with selected tasker but keep status as 'active' until payment is made
       task.selectedTasker = taskerId;
       task.agreedPayment = agreedPayment;
       task.agreedTime = agreedTimeDate;
-      task.status = 'scheduled';
+      // Don't change status to 'scheduled' yet - wait for advance payment
       await task.save({ session });
 
       // Update application status
@@ -583,14 +595,16 @@ export const selectTasker = async (req, res) => {
       await session.commitTransaction();
 
       // Populate and return updated task
-          await task.populate('selectedTasker', 'fullName email phone taskerProfile rating statistics');
-    await task.populate('targetedTasker', 'fullName email phone taskerProfile rating statistics');
-    await task.populate('customer', 'fullName email');
+      await task.populate('selectedTasker', 'fullName email phone taskerProfile rating statistics');
+      await task.populate('targetedTasker', 'fullName email phone taskerProfile rating statistics');
+      await task.populate('customer', 'fullName email');
 
       res.status(200).json({
         success: true,
-        message: 'Tasker selected successfully',
-        data: task
+        message: 'Tasker selected successfully. Please complete the advance payment to schedule the task.',
+        data: task,
+        requiresPayment: true,
+        advanceAmount: Math.round(agreedPayment * 0.2)
       });
     } catch (error) {
       await session.abortTransaction();
@@ -618,7 +632,7 @@ export const selectTasker = async (req, res) => {
 };
 
 // @desc    Confirm availability time and payment (tasker)
-// @route   POST /api/v1/tasks/:id/confirm-time
+// @route   POST /api/tasks/:id/confirm-time
 // @access  Private (Tasker only - must have applied)
 export const confirmTime = async (req, res) => {
   try {
@@ -788,7 +802,7 @@ export const confirmTime = async (req, res) => {
 };
 
 // @desc    Confirm schedule (tasker)
-// @route   POST /api/v1/tasks/:id/confirm-schedule
+// @route   POST /api/tasks/:id/confirm-schedule
 // @access  Private (Selected tasker only)
 export const confirmSchedule = async (req, res) => {
   try {
@@ -846,7 +860,7 @@ export const confirmSchedule = async (req, res) => {
 };
 
 // @desc    Complete task (customer)
-// @route   POST /api/v1/tasks/:id/complete
+// @route   POST /api/tasks/:id/complete
 // @access  Private (Task owner only)
 export const completeTask = async (req, res) => {
   try {
@@ -921,7 +935,7 @@ export const completeTask = async (req, res) => {
 };
 
 // @desc    Tasker complete task
-// @route   POST /api/v1/tasks/:id/tasker-complete
+// @route   POST /api/tasks/:id/tasker-complete
 // @access  Private (Selected tasker only)
 export const taskerCompleteTask = async (req, res) => {
   try {
@@ -984,7 +998,7 @@ export const taskerCompleteTask = async (req, res) => {
 };
 
 // @desc    Get user's tasks
-// @route   GET /api/v1/tasks/my-tasks
+// @route   GET /api/tasks/my-tasks
 // @access  Private
 export const getMyTasks = async (req, res) => {
   try {
@@ -1016,7 +1030,7 @@ export const getMyTasks = async (req, res) => {
 };
 
 // @desc    Get user's applications
-// @route   GET /api/v1/tasks/my-applications
+// @route   GET /api/tasks/my-applications
 // @access  Private (Tasker only)
 export const getMyApplications = async (req, res) => {
   try {
@@ -1044,7 +1058,7 @@ export const getMyApplications = async (req, res) => {
 };
 
 // @desc    Get tasks by customer ID
-// @route   GET /api/v1/tasks/customer/:customerId
+// @route   GET /api/tasks/customer/:customerId
 // @access  Public
 export const getTasksByCustomerId = async (req, res) => {
   try {
@@ -1105,7 +1119,7 @@ export const getTasksByCustomerId = async (req, res) => {
 };
 
 // @desc    Mark scheduled task as completed
-// @route   POST /api/v1/tasks/:id/mark-complete
+// @route   POST /api/tasks/:id/mark-complete
 // @access  Private (Customer or selected tasker only)
 export const markTaskComplete = async (req, res) => {
   try {
@@ -1227,7 +1241,7 @@ export const markTaskComplete = async (req, res) => {
 };
 
 // @desc    Cancel scheduled task
-// @route   POST /api/v1/tasks/:id/cancel-schedule
+// @route   POST /api/tasks/:id/cancel-schedule
 // @access  Private (Customer or selected tasker only)
 export const cancelScheduledTask = async (req, res) => {
   try {
@@ -1302,7 +1316,7 @@ export const cancelScheduledTask = async (req, res) => {
 };
 
 // @desc    Upload task photos
-// @route   POST /api/v1/tasks/upload-photos
+// @route   POST /api/tasks/upload-photos
 // @access  Private (Customers only)
 export const uploadTaskPhotos = async (req, res) => {
   try {
@@ -1376,7 +1390,7 @@ export const uploadTaskPhotos = async (req, res) => {
 };
 
 // @desc    Upload completion photos
-// @route   POST /api/v1/tasks/upload-completion-photo
+// @route   POST /api/tasks/upload-completion-photo
 // @access  Private (Taskers only)
 export const uploadCompletionPhoto = async (req, res) => {
   try {
@@ -1432,7 +1446,7 @@ export const uploadCompletionPhoto = async (req, res) => {
 };
 
 // @desc    Get category statistics with task counts
-// @route   GET /api/v1/tasks/category-stats
+// @route   GET /api/tasks/category-stats
 // @access  Public
 export const getCategoryStats = async (req, res) => {
   try {

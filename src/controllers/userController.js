@@ -128,7 +128,8 @@ export const updateProfile = async (req, res) => {
                 ...(taskerProfile.skills && { skills: taskerProfile.skills }),
                 ...(taskerProfile.bio && { bio: taskerProfile.bio }),
                 ...(taskerProfile.experience && { experience: taskerProfile.experience }),
-                ...(taskerProfile.area && { area: taskerProfile.area }),
+                ...(taskerProfile.province && { province: taskerProfile.province }),
+                ...(taskerProfile.district && { district: taskerProfile.district }),
                 ...(taskerProfile.hourlyRate !== undefined && { hourlyRate: Number(taskerProfile.hourlyRate) }),
                 ...(taskerProfile.advancePaymentAmount !== undefined && { advancePaymentAmount: Number(taskerProfile.advancePaymentAmount) }),
                 ...(typeof taskerProfile.isAvailable === 'boolean' && { isAvailable: taskerProfile.isAvailable })
