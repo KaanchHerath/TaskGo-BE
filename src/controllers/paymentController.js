@@ -13,16 +13,37 @@ const PAYHERE_CONFIG = {
   CANCEL_URL: process.env.PAYHERE_CANCEL_URL || 'http://localhost:3000/payment/cancelled'
 };
 
+// Debug: Log configuration on module load
+console.log('PayHere Configuration loaded:', {
+  MERCHANT_ID: PAYHERE_CONFIG.MERCHANT_ID ? 'SET' : 'NOT SET',
+  MERCHANT_SECRET: PAYHERE_CONFIG.MERCHANT_SECRET ? 'SET' : 'NOT SET',
+  NODE_ENV: process.env.NODE_ENV,
+  NOTIFY_URL: PAYHERE_CONFIG.NOTIFY_URL,
+  RETURN_URL: PAYHERE_CONFIG.RETURN_URL,
+  CANCEL_URL: PAYHERE_CONFIG.CANCEL_URL
+});
+
 // @desc    Initialize advance payment
 // @route   POST /api/payments/initiate-advance
 // @access  Private (Customer only)
 export const initiateAdvancePayment = async (req, res) => {
   try {
+    // Debug: Log current configuration state
+    console.log('Payment initiation - Current config:', {
+      MERCHANT_ID: PAYHERE_CONFIG.MERCHANT_ID ? 'SET' : 'NOT SET',
+      MERCHANT_SECRET: PAYHERE_CONFIG.MERCHANT_SECRET ? 'SET' : 'NOT SET',
+      NODE_ENV: process.env.NODE_ENV,
+      PAYHERE_MERCHANT_ID_ENV: process.env.PAYHERE_MERCHANT_ID ? 'SET' : 'NOT SET',
+      PAYHERE_MERCHANT_SECRET_ENV: process.env.PAYHERE_MERCHANT_SECRET ? 'SET' : 'NOT SET'
+    });
+
     // Check if PayHere credentials are configured
     if (!PAYHERE_CONFIG.MERCHANT_ID || !PAYHERE_CONFIG.MERCHANT_SECRET) {
       console.error('PayHere credentials not configured:', {
         MERCHANT_ID: !!PAYHERE_CONFIG.MERCHANT_ID,
-        MERCHANT_SECRET: !!PAYHERE_CONFIG.MERCHANT_SECRET
+        MERCHANT_SECRET: !!PAYHERE_CONFIG.MERCHANT_SECRET,
+        MERCHANT_ID_VALUE: PAYHERE_CONFIG.MERCHANT_ID,
+        MERCHANT_SECRET_VALUE: PAYHERE_CONFIG.MERCHANT_SECRET ? 'HIDDEN' : 'NOT SET'
       });
       return res.status(500).json({
         success: false,

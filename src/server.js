@@ -3,9 +3,11 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors";
 import fileUpload from "express-fileupload";
+import connectDB from "./config/db.js";
 import jobRequestRoutes from "./routes/jobRequests.js";
 import authRoutes from "./routes/auth.js";
 import statsRoutes from "./routes/statsRoutes.js";
+import healthRoutes from "./routes/health.js";
 import userRoutes from './routes/userRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
@@ -145,6 +147,9 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check routes (public)
+app.use("/api", healthRoutes);
+
 // Auth routes (public)
 app.use("/api/auth", authRoutes);
 
@@ -190,9 +195,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log("MongoDB connected"))
-  .catch(err => console.error(err));
+// Initialize database connection
+connectDB();
 
 const PORT = process.env.PORT || 5000;
 // Robust ESM main check for nodemon and node

@@ -200,6 +200,15 @@ router.post("/login", loginLimiter, async (req, res) => {
       return res.status(400).json({ message: "Invalid email format" });
     }
 
+    // Check database connection status
+    if (mongoose.connection.readyState !== 1) {
+      console.error('Database not connected. Ready state:', mongoose.connection.readyState);
+      return res.status(503).json({ 
+        message: "Database connection is not available. Please try again later.",
+        error: "DB_CONNECTION_ERROR"
+      });
+    }
+
     const user = await User.findOne({ email: email.toLowerCase() });
     
     if (!user) {
@@ -230,7 +239,26 @@ router.post("/login", loginLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: "An error occurred during login" });
+    
+    // Provide more specific error messages based on error type
+    if (error.name === 'MongooseError' && error.message.includes('buffering timed out')) {
+      return res.status(503).json({ 
+        message: "Database connection timeout. Please try again later.",
+        error: "DB_TIMEOUT_ERROR"
+      });
+    }
+    
+    if (error.name === 'MongoNetworkError') {
+      return res.status(503).json({ 
+        message: "Database network error. Please try again later.",
+        error: "DB_NETWORK_ERROR"
+      });
+    }
+    
+    res.status(500).json({ 
+      message: "An error occurred during login",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
