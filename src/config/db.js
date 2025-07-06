@@ -3,8 +3,6 @@ import mongoose from "mongoose";
 const connectDB = async () => {
     try {
         const options = {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
             // Connection pooling options
             maxPoolSize: 10, // Maximum number of connections in the pool
             minPoolSize: 2,  // Minimum number of connections in the pool
@@ -39,8 +37,16 @@ const connectDB = async () => {
 
     } catch (error) {
         console.error(`MongoDB Connection Error: ${error.message}`);
-        console.error('Connection string (masked):', process.env.MONGO_URI ? 
-            process.env.MONGO_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@') : 'Not set');
+        
+        if (!process.env.MONGO_URI) {
+            console.error('❌ MONGO_URI environment variable is not set!');
+            console.error('💡 Please set the MONGO_URI environment variable in your deployment platform.');
+            console.error('📖 See RENDER_ENVIRONMENT_SETUP.md for detailed instructions.');
+        } else {
+            console.error('Connection string (masked):', 
+                process.env.MONGO_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'));
+        }
+        
         process.exit(1);
     }
 };
