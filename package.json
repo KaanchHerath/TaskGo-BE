@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "build": "echo 'Build completed - Node.js backend ready for production'",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:simple": "node simple-test.js",
     "test:vitest": "vitest run"
