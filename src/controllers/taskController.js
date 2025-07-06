@@ -575,7 +575,17 @@ export const selectTasker = async (req, res) => {
       task.agreedPayment = agreedPayment;
       task.agreedTime = agreedTimeDate;
       // Don't change status to 'scheduled' yet - wait for advance payment
+      
+      console.log('Saving task with data:', {
+        taskId: task._id,
+        selectedTasker: task.selectedTasker,
+        agreedPayment: task.agreedPayment,
+        agreedTime: task.agreedTime
+      });
+      
       await task.save({ session });
+      
+      console.log('Task saved successfully');
 
       // Update application status
       application.status = 'confirmed';
@@ -598,6 +608,13 @@ export const selectTasker = async (req, res) => {
       await task.populate('selectedTasker', 'fullName email phone taskerProfile rating statistics');
       await task.populate('targetedTasker', 'fullName email phone taskerProfile rating statistics');
       await task.populate('customer', 'fullName email');
+
+      console.log('Returning task data:', {
+        taskId: task._id,
+        agreedPayment: task.agreedPayment,
+        agreedTime: task.agreedTime,
+        selectedTasker: task.selectedTasker
+      });
 
       res.status(200).json({
         success: true,

@@ -46,12 +46,15 @@ const taskSchema = new mongoose.Schema({
     min: [1, 'Agreed payment must be at least $1'],
     validate: {
       validator: function(value) {
-        if (value && this.minPayment && this.maxPayment) {
-          return value >= this.minPayment && value <= this.maxPayment;
+        // Allow agreed payment to be set during tasker selection
+        // The original min/max payment range is just for initial task posting
+        // The agreed payment can be negotiated between customer and tasker
+        if (value && value < 1) {
+          return false;
         }
         return true;
       },
-      message: 'Agreed payment must be between minimum and maximum payment'
+      message: 'Agreed payment must be at least $1'
     }
   },
   agreedTime: {
