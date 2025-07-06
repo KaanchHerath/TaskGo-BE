@@ -36,7 +36,11 @@ const taskSchema = new mongoose.Schema({
     min: [1, 'Maximum payment must be at least $1'],
     validate: {
       validator: function(value) {
-        return value >= this.minPayment;
+        // Check if minPayment exists and is a valid number
+        if (this.minPayment && typeof this.minPayment === 'number' && typeof value === 'number') {
+          return value >= this.minPayment;
+        }
+        return true; // Allow validation to pass if minPayment is not set yet
       },
       message: 'Maximum payment must be greater than or equal to minimum payment'
     }
@@ -89,6 +93,7 @@ const taskSchema = new mongoose.Schema({
     required: [true, 'Start date is required'],
     validate: {
       validator: function(value) {
+        if (!value) return true; // Let required validation handle this
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         return value >= today;
@@ -101,6 +106,7 @@ const taskSchema = new mongoose.Schema({
     required: [true, 'End date is required'],
     validate: {
       validator: function(value) {
+        if (!value || !this.startDate) return true; // Let required validation handle this
         return value >= this.startDate;
       },
       message: 'End date must be after start date'
@@ -271,6 +277,11 @@ taskSchema.virtual('postedDate').get(function() {
 
 // Pre-save middleware
 taskSchema.pre('save', function(next) {
+  // Validate payment range when both min and max payment are set
+  if (this.minPayment && this.maxPayment && this.minPayment >= this.maxPayment) {
+    return next(new Error('Maximum payment must be greater than minimum payment'));
+  }
+  
   if (this.isModified('status') && this.status === 'scheduled') {
     if (!this.selectedTasker) {
       return next(new Error('Selected tasker is required when status is scheduled'));

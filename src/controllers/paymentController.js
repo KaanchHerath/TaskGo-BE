@@ -4,13 +4,13 @@ import crypto from 'crypto';
 
 // PayHere Configuration
 const PAYHERE_CONFIG = {
-  MERCHANT_ID: process.env.PAYHERE_MERCHANT_ID || '1217129',
-  MERCHANT_SECRET: process.env.PAYHERE_MERCHANT_SECRET || 'MzQ0OTU5OTY5MDMxNDE3MjU3NDM5MTE3OTc0NjA5OTg5OTI=',
+  MERCHANT_ID: process.env.PAYHERE_MERCHANT_ID,
+  MERCHANT_SECRET: process.env.PAYHERE_MERCHANT_SECRET,
   SANDBOX_URL: 'https://sandbox.payhere.lk/pay/checkout',
   LIVE_URL: 'https://www.payhere.lk/pay/checkout',
   NOTIFY_URL: process.env.PAYHERE_NOTIFY_URL || 'http://localhost:5000/api/payments/notify',
-  RETURN_URL: process.env.PAYHERE_RETURN_URL || 'http://localhost:3000/payment/return',
-  CANCEL_URL: process.env.PAYHERE_CANCEL_URL || 'http://localhost:3000/payment/cancel'
+  RETURN_URL: process.env.PAYHERE_RETURN_URL || 'http://localhost:3000/payment/success',
+  CANCEL_URL: process.env.PAYHERE_CANCEL_URL || 'http://localhost:3000/payment/cancelled'
 };
 
 // @desc    Initialize advance payment
@@ -18,6 +18,18 @@ const PAYHERE_CONFIG = {
 // @access  Private (Customer only)
 export const initiateAdvancePayment = async (req, res) => {
   try {
+    // Check if PayHere credentials are configured
+    if (!PAYHERE_CONFIG.MERCHANT_ID || !PAYHERE_CONFIG.MERCHANT_SECRET) {
+      console.error('PayHere credentials not configured:', {
+        MERCHANT_ID: !!PAYHERE_CONFIG.MERCHANT_ID,
+        MERCHANT_SECRET: !!PAYHERE_CONFIG.MERCHANT_SECRET
+      });
+      return res.status(500).json({
+        success: false,
+        message: 'Payment gateway not configured. Please contact support.'
+      });
+    }
+
     const { taskId, applicationId } = req.body;
 
     // Verify user is customer
@@ -114,11 +126,22 @@ export const initiateAdvancePayment = async (req, res) => {
     task.paymentId = orderId;
     await task.save();
 
+    // Determine which PayHere URL to use based on environment
+    const paymentUrl = process.env.NODE_ENV === 'production' ? PAYHERE_CONFIG.LIVE_URL : PAYHERE_CONFIG.SANDBOX_URL;
+
+    console.log('Payment initiated successfully:', {
+      orderId,
+      amount: advanceAmount,
+      merchantId: PAYHERE_CONFIG.MERCHANT_ID,
+      paymentUrl,
+      environment: process.env.NODE_ENV
+    });
+
     res.status(200).json({
       success: true,
       message: 'Payment initiated successfully',
       data: {
-        paymentUrl: PAYHERE_CONFIG.SANDBOX_URL,
+        paymentUrl,
         paymentData,
         orderId,
         amount: advanceAmount
