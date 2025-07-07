@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import logger from "../utils/logger.js";
 
 const connectDB = async () => {
     try {
@@ -20,30 +21,30 @@ const connectDB = async () => {
         };
 
         await mongoose.connect(process.env.MONGO_URI, options);
-        console.log("MongoDB Connected Successfully");
+        logger.info("MongoDB Connected Successfully");
         
         // Handle connection events
         mongoose.connection.on('error', (err) => {
-            console.error('MongoDB connection error:', err);
+            logger.error('MongoDB connection error', err);
         });
 
         mongoose.connection.on('disconnected', () => {
-            console.log('MongoDB disconnected');
+            logger.warn('MongoDB disconnected');
         });
 
         mongoose.connection.on('reconnected', () => {
-            console.log('MongoDB reconnected');
+            logger.info('MongoDB reconnected');
         });
 
     } catch (error) {
-        console.error(`MongoDB Connection Error: ${error.message}`);
+        logger.error(`MongoDB Connection Error: ${error.message}`, error);
         
         if (!process.env.MONGO_URI) {
-            console.error('❌ MONGO_URI environment variable is not set!');
-            console.error('💡 Please set the MONGO_URI environment variable in your deployment platform.');
-            console.error('📖 See RENDER_ENVIRONMENT_SETUP.md for detailed instructions.');
+            logger.error('MONGO_URI environment variable is not set!');
+            logger.error('Please set the MONGO_URI environment variable in your deployment platform.');
+            logger.error('See RENDER_ENVIRONMENT_SETUP.md for detailed instructions.');
         } else {
-            console.error('Connection string (masked):', 
+            logger.error('Connection string (masked):', 
                 process.env.MONGO_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'));
         }
         

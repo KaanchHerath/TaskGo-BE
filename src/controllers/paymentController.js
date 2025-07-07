@@ -1,6 +1,9 @@
 import Payment from '../models/Payment.js';
 import Task from '../models/Task.js';
 import crypto from 'crypto';
+import dotenv from "dotenv";
+
+dotenv.config();
 
 // PayHere Configuration
 const PAYHERE_CONFIG = {
@@ -8,9 +11,9 @@ const PAYHERE_CONFIG = {
   MERCHANT_SECRET: process.env.PAYHERE_MERCHANT_SECRET,
   SANDBOX_URL: 'https://sandbox.payhere.lk/pay/checkout',
   LIVE_URL: 'https://www.payhere.lk/pay/checkout',
-  NOTIFY_URL: process.env.PAYHERE_NOTIFY_URL || 'http://localhost:5000/api/payments/notify',
-  RETURN_URL: process.env.PAYHERE_RETURN_URL || 'http://localhost:3000/payment/success',
-  CANCEL_URL: process.env.PAYHERE_CANCEL_URL || 'http://localhost:3000/payment/cancelled'
+  NOTIFY_URL: process.env.PAYHERE_NOTIFY_URL ,
+  RETURN_URL: process.env.PAYHERE_RETURN_URL ,
+  CANCEL_URL: process.env.PAYHERE_CANCEL_URL 
 };
 
 // Debug: Log configuration on module load

@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import logger from "../utils/logger.js";
 
 export const protect = async (req, res, next) => {
     let token;
@@ -10,9 +11,11 @@ export const protect = async (req, res, next) => {
             req.user = await User.findById(decoded.userId).select("-password");
             next();
         } catch (error) {
+            logger.auth('Invalid token attempt', req.ip);
             res.status(401).json({ message: "Not authorized, invalid token" });
         }
     } else {
+        logger.auth('No token provided', req.ip);
         res.status(401).json({ message: "Not authorized, no token provided" });
     }
 };
@@ -27,7 +30,7 @@ export const optionalAuth = async (req, res, next) => {
             req.user = await User.findById(decoded.userId).select("-password");
         } catch (error) {
             // Token is invalid, but we don't fail - just continue without user
-            console.log("Invalid token provided, continuing without authentication");
+            logger.debug("Invalid token provided, continuing without authentication");
             req.user = null;
         }
     }
