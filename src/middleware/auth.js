@@ -74,7 +74,8 @@ export const verifyToken = async (req, res, next) => {
     req.user = user; // Ensures _id exists for downstream logic
     next();
   } catch (error) {
-    res.status(400).json({ message: "Invalid token" });
+    // Use 401 to indicate authentication failure consistently
+    res.status(401).json({ message: "Invalid token" });
   }
 };
 

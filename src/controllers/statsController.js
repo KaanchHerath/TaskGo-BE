@@ -98,39 +98,51 @@ export const getTaskerStats = async (req, res) => {
             return res.status(400).json({ message: "Tasker ID is required" });
         }
 
+        // Import Task model
+        const Task = (await import('../models/Task.js')).default;
+
         // Get current month's start date
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-        // Get completed tasks for the tasker
-        const completedTasks = await JobRequest.countDocuments({
-            taskerId: taskerId,
+        // Get completed tasks for the tasker (using Task model, not JobRequest)
+        const completedTasks = await Task.countDocuments({
+            selectedTasker: taskerId,
             status: 'completed'
         });
 
-        // Get this month's earnings
-        const thisMonthJobs = await JobRequest.find({
-            taskerId: taskerId,
+        // Get this month's earnings from advance payments (20% of agreed payment)
+        const thisMonthTasks = await Task.find({
+            selectedTasker: taskerId,
             status: 'completed',
+            advancePaymentStatus: 'released',
             updatedAt: { $gte: startOfMonth }
         });
 
-        const thisMonth = thisMonthJobs.reduce((sum, job) => {
-            return sum + (job.agreedPayment || job.budget || 0);
+        const thisMonth = thisMonthTasks.reduce((sum, task) => {
+            // Calculate advance payment (20% of agreed payment)
+            const advanceAmount = task.agreedPayment ? Math.round(task.agreedPayment * 0.2) : 0;
+            return sum + advanceAmount;
         }, 0);
 
-        // Get total earnings
-        const allCompletedJobs = await JobRequest.find({
-            taskerId: taskerId,
-            status: 'completed'
+        // Get total earnings from advance payments (20% of agreed payment)
+        // Only count tasks that are completed and have advance payment released
+        const allCompletedTasks = await Task.find({
+            selectedTasker: taskerId,
+            status: 'completed',
+            advancePaymentStatus: 'released'
         });
 
-        const totalEarnings = allCompletedJobs.reduce((sum, job) => {
-            return sum + (job.agreedPayment || job.budget || 0);
+        const totalEarnings = allCompletedTasks.reduce((sum, task) => {
+            // Calculate advance payment (20% of agreed payment)
+            const advanceAmount = task.agreedPayment ? Math.round(task.agreedPayment * 0.2) : 0;
+            return sum + advanceAmount;
         }, 0);
 
-        // Calculate average rating (placeholder - would need to integrate with feedback system)
-        const averageRating = 4.5; // This should be calculated from actual feedback data
+        // Calculate average rating from user model
+        const User = (await import('../models/User.js')).default;
+        const tasker = await User.findById(taskerId);
+        const averageRating = tasker?.rating?.average || 0;
 
         res.json({
             thisMonth,

@@ -408,6 +408,38 @@ export const reportFeedback = async (req, res) => {
   }
 };
 
+// @desc    Get recent reviews for dashboard
+// @route   GET /api/feedback/recent-reviews
+// @access  Public
+export const getRecentReviews = async (req, res) => {
+  try {
+    const { limit = 10, type } = req.query;
+
+    let query = {};
+    if (type) {
+      query.feedbackType = type;
+    }
+
+    const recentReviews = await Feedback.find(query)
+      .populate('fromUser', 'fullName role')
+      .populate('toUser', 'fullName role')
+      .populate('task', 'title category')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit));
+
+    res.status(200).json({
+      success: true,
+      data: recentReviews
+    });
+  } catch (error) {
+    console.error('Get recent reviews error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching recent reviews'
+    });
+  }
+};
+
 // @desc    Get user rating summary
 // @route   GET /api/feedback/rating-summary/:userId
 // @access  Public

@@ -1227,6 +1227,55 @@ export const markTaskComplete = async (req, res) => {
           await customer.updateRating(task.taskerRatingForCustomer);
         }
       }
+
+      // Auto-create feedback records when both parties have completed
+      const Feedback = (await import('../models/Feedback.js')).default;
+      
+      // Create customer-to-tasker feedback if rating/review exists
+      if (task.customerRating || task.customerReview) {
+        try {
+          await Feedback.create({
+            task: task._id,
+            fromUser: task.customer,
+            toUser: workingTaskerId,
+            rating: task.customerRating || 3,
+            review: task.customerReview || 'No review provided',
+            feedbackType: 'customer-to-tasker',
+            taskerFeedbackCategories: {
+              quality: task.customerRating || 3,
+              punctuality: task.customerRating || 3,
+              communication: task.customerRating || 3,
+              professionalism: task.customerRating || 3
+            }
+          });
+        } catch (feedbackError) {
+          console.error('Error creating customer feedback:', feedbackError);
+          // Don't fail the task completion if feedback creation fails
+        }
+      }
+
+      // Create tasker-to-customer feedback if rating/review exists
+      if (task.taskerRatingForCustomer || task.taskerFeedback) {
+        try {
+          await Feedback.create({
+            task: task._id,
+            fromUser: workingTaskerId,
+            toUser: task.customer,
+            rating: task.taskerRatingForCustomer || 3,
+            review: task.taskerFeedback || 'No review provided',
+            feedbackType: 'tasker-to-customer',
+            customerFeedbackCategories: {
+              clarity: task.taskerRatingForCustomer || 3,
+              responsiveness: task.taskerRatingForCustomer || 3,
+              cooperation: task.taskerRatingForCustomer || 3,
+              fairness: task.taskerRatingForCustomer || 3
+            }
+          });
+        } catch (feedbackError) {
+          console.error('Error creating tasker feedback:', feedbackError);
+          // Don't fail the task completion if feedback creation fails
+        }
+      }
     }
 
     await task.save();

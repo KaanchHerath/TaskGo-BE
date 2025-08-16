@@ -3,32 +3,54 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import User from "../models/User.js";
-import { rateLimit } from 'express-rate-limit';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const router = express.Router();
+// Cookie utilities (avoid extra deps)
+const parseCookies = (cookieHeader = '') => {
+  return cookieHeader.split(';').reduce((acc, part) => {
+    const [key, ...v] = part.trim().split('=');
+    if (!key) return acc;
+    acc[decodeURIComponent(key)] = decodeURIComponent(v.join('='));
+    return acc;
+  }, {});
+};
+
+const getRefreshSecret = () => process.env.JWT_REFRESH_SECRET || process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET;
+
+const issueAccessToken = (user) => {
+  return jwt.sign(
+    { userId: user._id, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+};
+
+const issueRefreshToken = (user) => {
+  return jwt.sign(
+    { userId: user._id, tokenType: 'refresh' },
+    getRefreshSecret(),
+    { expiresIn: '7d' }
+  );
+};
+
+const setRefreshCookie = (res, token) => {
+  // Use Secure + SameSite=None for cross-site cookies; path limited to refresh/logout
+  res.cookie('refreshToken', token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+    path: '/api/auth',
+    maxAge: 7 * 24 * 60 * 60 * 1000
+  });
+};
+
 
 // ESM-compatible __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Rate limiter for login attempts
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 attempts per window (increased from 5)
-  message: { message: "Too many login attempts, please try again after 15 minutes" },
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  handler: (req, res) => {
-    res.status(429).json({
-      message: "Too many login attempts, please try again after 15 minutes",
-      retryAfter: Math.ceil(15 * 60 / 1000), // seconds
-      error: "RATE_LIMIT_EXCEEDED"
-    });
-  }
-});
 
 // Password strength validation
 const validatePassword = (password) => {
@@ -174,11 +196,9 @@ router.post("/register", async (req, res) => {
     await user.save();
 
     // Create token
-    const token = jwt.sign(
-      { userId: user._id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" }
-    );
+    const token = issueAccessToken(user);
+    const refreshToken = issueRefreshToken(user);
+    setRefreshCookie(res, refreshToken);
     
     res.status(201).json({ 
       message: "User registered successfully",
@@ -198,22 +218,7 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// Rate limit reset endpoint (for development/testing only)
-router.post("/reset-rate-limit", (req, res) => {
-  if (process.env.NODE_ENV === 'production') {
-    return res.status(403).json({ message: "Rate limit reset not available in production" });
-  }
-  
-  // Clear the rate limit store for the current IP
-  const key = `rl:login:${req.ip}`;
-  if (loginLimiter.store && loginLimiter.store.resetKey) {
-    loginLimiter.store.resetKey(key);
-  }
-  
-  res.json({ message: "Rate limit reset successfully" });
-});
-
-router.post("/login", loginLimiter, async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -244,23 +249,57 @@ router.post("/login", loginLimiter, async (req, res) => {
     if (!validPassword) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
+
+    // Check if user is suspended
+    if (user.isSuspended) {
+      return res.status(403).json({ 
+        message: "Account is suspended. Please contact support for assistance.",
+        accountStatus: "suspended"
+      });
+    }
+
+    // Check tasker approval status
+    let approvalStatus = null;
+    if (user.role === 'tasker') {
+      approvalStatus = user.taskerProfile?.approvalStatus || 'pending';
+      
+      // If tasker is not approved, provide specific message
+      if (approvalStatus !== 'approved') {
+        return res.status(403).json({
+          message: approvalStatus === 'pending' 
+            ? "Your account is pending approval. You will be notified once approved."
+            : "Your account has been rejected. Please contact support for more information.",
+          accountStatus: "not_approved",
+          approvalStatus: approvalStatus,
+          rejectionReason: user.taskerProfile?.rejectionReason || null
+        });
+      }
+    }
     
-    const token = jwt.sign(
-      { userId: user._id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" }
-    );
+    const token = issueAccessToken(user);
+    const refreshToken = issueRefreshToken(user);
+    setRefreshCookie(res, refreshToken);
+    
+    // Prepare user response data
+    const userData = {
+      id: user._id,
+      username: user.username,
+      fullName: user.fullName,
+      email: user.email,
+      phone: user.phone,
+      role: user.role
+    };
+
+    // Add approval status for taskers
+    if (user.role === 'tasker') {
+      userData.approvalStatus = approvalStatus;
+      userData.isApproved = user.taskerProfile?.isApproved || false;
+    }
     
     res.json({ 
       token, 
-      user: {
-        id: user._id,
-        username: user.username,
-        fullName: user.fullName,
-        email: user.email,
-        phone: user.phone,
-        role: user.role
-      }
+      user: userData,
+      accountStatus: "active"
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -379,9 +418,15 @@ router.post("/register-tasker", async (req, res) => {
         }
       });
       await user.save();
-      // Create JWT
+      // Create JWT with approval status for taskers
+      const tokenPayload = { userId: user._id, role: user.role };
+      if (user.role === 'tasker') {
+        tokenPayload.isApproved = false; // New taskers are not approved by default
+        tokenPayload.approvalStatus = 'pending';
+      }
+      
       const token = jwt.sign(
-        { userId: user._id, role: user.role },
+        tokenPayload,
         process.env.JWT_SECRET,
         { expiresIn: "24h" }
       );
@@ -403,3 +448,35 @@ router.post("/register-tasker", async (req, res) => {
 );
 
 export default router;
+ 
+// Refresh access token using httpOnly refresh cookie
+router.post('/refresh', async (req, res) => {
+  try {
+    const cookies = req.headers.cookie ? parseCookies(req.headers.cookie) : {};
+    const token = cookies.refreshToken;
+    if (!token) {
+      return res.status(401).json({ message: 'No refresh token' });
+    }
+    const decoded = jwt.verify(token, getRefreshSecret());
+    if (!decoded || decoded.tokenType !== 'refresh' || !decoded.userId) {
+      return res.status(401).json({ message: 'Invalid refresh token' });
+    }
+    const user = await User.findById(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+    const newAccess = issueAccessToken(user);
+    // Optionally rotate refresh
+    const newRefresh = issueRefreshToken(user);
+    setRefreshCookie(res, newRefresh);
+    return res.json({ token: newAccess });
+  } catch (err) {
+    return res.status(401).json({ message: 'Failed to refresh token' });
+  }
+});
+
+// Logout clears refresh cookie
+router.post('/logout', (req, res) => {
+  res.clearCookie('refreshToken', { path: '/api/auth', httpOnly: true, secure: true, sameSite: 'none' });
+  return res.json({ message: 'Logged out' });
+});

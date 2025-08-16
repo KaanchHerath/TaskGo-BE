@@ -1,4 +1,5 @@
 import express from "express";
+import cookieParser from "cookie-parser";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import connectDB from "./config/db.js";
@@ -13,7 +14,7 @@ import taskerRoutes from './routes/taskerRoutes.js';
 import feedbackRoutes from './routes/feedbackRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
-import { securityMiddleware, corsMiddleware, rateLimiter, authRateLimiter } from "./middleware/security.js";
+import { securityMiddleware, corsMiddleware } from "./middleware/security.js";
 import { fileUploadMiddleware } from "./middleware/fileUpload.js";
 import { requestLogger } from "./middleware/logging.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
@@ -27,9 +28,6 @@ const app = express();
 app.use(securityMiddleware);
 app.use(corsMiddleware);
 
-// Rate limiting
-app.use(rateLimiter);
-
 // File upload middleware
 app.use(fileUploadMiddleware);
 
@@ -39,13 +37,14 @@ app.use('/uploads', express.static('uploads'));
 // Body parsing middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(cookieParser());
 
 // Request logging middleware
 app.use(requestLogger);
 
 // API Routes
 app.use("/api", healthRoutes);
-app.use("/api/auth", authRateLimiter, authRoutes);
+app.use("/api/auth", authRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/tasks", taskRoutes);
 

@@ -14,7 +14,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['customer', 'tasker'],
+    enum: ['customer', 'tasker', 'admin'],
     required: true
   },
   // Common fields for both customer and tasker
@@ -36,6 +36,25 @@ const userSchema = new mongoose.Schema({
       },
       message: 'Invalid phone number format'
     }
+  },
+  // Account suspension fields
+  isSuspended: {
+    type: Boolean,
+    default: false
+  },
+  suspendedAt: {
+    type: Date,
+    default: null
+  },
+  suspendedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  suspensionReason: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Suspension reason cannot exceed 500 characters']
   },
   // Rating and statistics fields
   rating: {
@@ -169,7 +188,54 @@ const userSchema = new mongoose.Schema({
     qualificationDocuments: [{
       type: String // URL or path to the document
       // optional
-    }]
+    }],
+    // Approval fields for taskers
+    isApproved: {
+      type: Boolean,
+      default: false,
+      required: function() {
+        return this.role === 'tasker';
+      }
+    },
+    approvalStatus: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+      required: function() {
+        return this.role === 'tasker';
+      },
+      validate: {
+        validator: function(value) {
+          if (this.role !== 'tasker') return true;
+          return ['pending', 'approved', 'rejected'].includes(value);
+        },
+        message: 'Invalid approval status'
+      }
+    },
+    rejectionReason: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Rejection reason cannot exceed 500 characters'],
+      validate: {
+        validator: function(value) {
+          // Only required if approvalStatus is 'rejected'
+          if (this.role === 'tasker' && this.approvalStatus === 'rejected') {
+            return value && value.length > 0;
+          }
+          return true;
+        },
+        message: 'Rejection reason is required when approval status is rejected'
+      }
+    },
+    approvedAt: {
+      type: Date,
+      default: null
+    },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    }
   },
   // Customer specific fields
   customerProfile: {
@@ -187,6 +253,9 @@ const userSchema = new mongoose.Schema({
   timestamps: true,
   discriminatorKey: 'role'
 });
+
+// Add index for tasker approval queries
+userSchema.index({ 'role': 1, 'taskerProfile.approvalStatus': 1 });
 
 // Instance method to calculate and update average rating
 userSchema.methods.updateRating = function(newRating, categoryRatings = null) {

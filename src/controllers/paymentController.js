@@ -125,6 +125,9 @@ export const initiateAdvancePayment = async (req, res) => {
       description: `Advance payment for task: ${task.title}`
     });
 
+    // Calculate platform commission (10% of advance payment)
+    payment.calculatePlatformCommission();
+
     await payment.save();
 
     // Prepare PayHere payment data
@@ -157,6 +160,23 @@ export const initiateAdvancePayment = async (req, res) => {
 
     const md5sig = crypto.createHash('md5').update(signatureString).digest('hex').toUpperCase();
 
+    // Generate PayHere hash value as required by JavaScript SDK
+    // hash = to_upper_case(md5(merchant_id + order_id + amount + currency + to_upper_case(md5(merchant_secret))))
+    const merchantSecretHash = crypto.createHash('md5').update(PAYHERE_CONFIG.MERCHANT_SECRET).digest('hex').toUpperCase();
+    const hashString = PAYHERE_CONFIG.MERCHANT_ID + orderId + advanceAmount.toFixed(2) + 'LKR' + merchantSecretHash;
+    const hash = crypto.createHash('md5').update(hashString).digest('hex').toUpperCase();
+
+    // Debug hash generation
+    console.log('Hash generation debug:', {
+      merchantId: PAYHERE_CONFIG.MERCHANT_ID,
+      orderId,
+      amount: advanceAmount.toFixed(2),
+      currency: 'LKR',
+      merchantSecretHash,
+      hashString,
+      finalHash: hash
+    });
+
     // Add signature to payment data
     paymentData.md5sig = md5sig;
 
@@ -184,7 +204,8 @@ export const initiateAdvancePayment = async (req, res) => {
         paymentUrl,
         paymentData,
         orderId,
-        amount: advanceAmount
+        amount: advanceAmount,
+        hash // Return the hash for frontend PayHere SDK
       }
     });
 
@@ -474,6 +495,43 @@ export const getMyPayments = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while fetching payments'
+    });
+  }
+}; 
+
+// @desc    Check payment status by order ID
+// @route   GET /api/payments/status/:orderId
+// @access  Public
+export const checkPaymentStatus = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    // Find payment by order ID
+    const payment = await Payment.findOne({ payhereOrderId: orderId });
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found'
+      });
+    }
+
+    // Return payment status
+    res.status(200).json({
+      success: true,
+      data: {
+        orderId: payment.payhereOrderId,
+        paymentStatus: payment.status,
+        amount: payment.amount,
+        taskId: payment.task,
+        processedAt: payment.processedAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Check payment status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while checking payment status'
     });
   }
 }; 

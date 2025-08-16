@@ -6,7 +6,8 @@ import {
   handlePaymentCancel,
   releaseAdvancePayment,
   getTaskPayments,
-  getMyPayments
+  getMyPayments,
+  checkPaymentStatus
 } from '../controllers/paymentController.js';
 import { protect } from '../middleware/auth.js';
 
@@ -16,6 +17,7 @@ const router = express.Router();
 router.post('/notify', handlePaymentNotification);
 router.get('/return', handlePaymentReturn);
 router.get('/cancel', handlePaymentCancel);
+router.get('/status/:orderId', checkPaymentStatus); // New endpoint for checking payment status
 
 // Protected routes
 router.use(protect);

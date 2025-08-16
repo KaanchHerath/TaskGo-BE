@@ -1,4 +1,7 @@
 import User from "../models/User.js";
+import Task from "../models/Task.js";
+import Application from "../models/Application.js";
+import Feedback from "../models/Feedback.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
@@ -29,11 +32,57 @@ export const loginUser = async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
-        const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1h" });
+        // Check if user is suspended
+        if (user.isSuspended) {
+            return res.status(403).json({ 
+                message: "Account is suspended. Please contact support for assistance.",
+                accountStatus: "suspended"
+            });
+        }
 
-        res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+        // Check tasker approval status
+        let approvalStatus = null;
+        if (user.role === 'tasker') {
+            approvalStatus = user.taskerProfile?.approvalStatus || 'pending';
+            
+            // If tasker is not approved, provide specific message
+            if (approvalStatus !== 'approved') {
+                return res.status(403).json({
+                    message: approvalStatus === 'pending' 
+                        ? "Your account is pending approval. You will be notified once approved."
+                        : "Your account has been rejected. Please contact support for more information.",
+                    accountStatus: "not_approved",
+                    approvalStatus: approvalStatus,
+                    rejectionReason: user.taskerProfile?.rejectionReason || null
+                });
+            }
+        }
+
+        const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1h" });
+
+        // Prepare user response data
+        const userData = {
+            id: user._id,
+            fullName: user.fullName,
+            email: user.email,
+            role: user.role,
+            phone: user.phone
+        };
+
+        // Add approval status for taskers
+        if (user.role === 'tasker') {
+            userData.approvalStatus = approvalStatus;
+            userData.isApproved = user.taskerProfile?.isApproved || false;
+        }
+
+        res.json({ 
+            token, 
+            user: userData,
+            accountStatus: "active"
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error('Login error:', error);
+        res.status(500).json({ message: "An error occurred during login" });
     }
 };
 
@@ -255,5 +304,426 @@ export const changePassword = async (req, res) => {
     } catch (error) {
         console.error('Change password error:', error);
         res.status(500).json({ message: 'An error occurred while changing password' });
+    }
+};
+
+/**
+ * Get approval status for taskers
+ * @route GET /api/users/approval-status
+ * @access Tasker only
+ */
+export const getApprovalStatus = async (req, res) => {
+    try {
+        const userId = req.user._id || req.user.userId;
+
+        // Find the user
+        const user = await User.findById(userId).select('-password');
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Check if user is a tasker
+        if (user.role !== 'tasker') {
+            return res.status(403).json({
+                success: false,
+                message: 'This endpoint is only available for taskers'
+            });
+        }
+
+        // Get approval status
+        const approvalStatus = user.taskerProfile?.approvalStatus || 'pending';
+        const isApproved = user.taskerProfile?.isApproved || false;
+        const rejectionReason = user.taskerProfile?.rejectionReason || null;
+        const approvedAt = user.taskerProfile?.approvedAt || null;
+        const approvedBy = user.taskerProfile?.approvedBy || null;
+
+        // Get additional context for pending applications
+        let additionalInfo = {};
+        if (approvalStatus === 'pending') {
+            // Count how many days since registration
+            const daysSinceRegistration = Math.floor((Date.now() - new Date(user.createdAt)) / (1000 * 60 * 60 * 24));
+            additionalInfo = {
+                daysSinceRegistration,
+                estimatedProcessingTime: '3-5 business days',
+                canUpdateProfile: true
+            };
+        } else if (approvalStatus === 'rejected') {
+            additionalInfo = {
+                canReapply: true,
+                reapplicationInstructions: 'Please update your profile and documents, then contact support to request re-evaluation.'
+            };
+        } else if (approvalStatus === 'approved') {
+            additionalInfo = {
+                approvedAt: approvedAt,
+                approvedBy: approvedBy ? 'Admin' : null,
+                canStartWorking: true
+            };
+        }
+
+        res.json({
+            success: true,
+            message: 'Approval status retrieved successfully',
+            data: {
+                approvalStatus,
+                isApproved,
+                rejectionReason,
+                approvedAt,
+                approvedBy,
+                additionalInfo
+            }
+        });
+
+    } catch (error) {
+        console.error('Get approval status error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while retrieving approval status',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
+    }
+};
+
+/**
+ * Get all users with pagination, filtering, and search
+ * @route GET /api/users
+ * @access Admin only
+ */
+export const getAllUsers = async (req, res) => {
+    try {
+        const {
+            page = 1,
+            limit = 20,
+            search = '',
+            role = '',
+            status = '',
+            sortBy = 'createdAt',
+            sortOrder = 'desc'
+        } = req.query;
+
+        // Build query
+        const query = {};
+
+        // Search functionality
+        if (search) {
+            query.$or = [
+                { fullName: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+                { phone: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Role filter
+        if (role && ['customer', 'tasker', 'admin'].includes(role)) {
+            query.role = role;
+        }
+
+        // Status filter for taskers
+        if (status && role === 'tasker') {
+            if (status === 'approved') {
+                query['taskerProfile.approvalStatus'] = 'approved';
+            } else if (status === 'pending') {
+                query['taskerProfile.approvalStatus'] = 'pending';
+            } else if (status === 'rejected') {
+                query['taskerProfile.approvalStatus'] = 'rejected';
+            } else if (status === 'suspended') {
+                query.isSuspended = true;
+            }
+        }
+
+        // Status filter for all users
+        if (status === 'suspended') {
+            query.isSuspended = true;
+        } else if (status === 'active') {
+            query.isSuspended = { $ne: true };
+        }
+
+        // Pagination
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        // Sort options
+        const sortOptions = {};
+        const validSortFields = ['createdAt', 'fullName', 'email', 'rating.average', 'statistics.tasksCompleted'];
+        const validSortOrders = ['asc', 'desc'];
+
+        if (validSortFields.includes(sortBy) && validSortOrders.includes(sortOrder)) {
+            sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
+        } else {
+            sortOptions.createdAt = -1; // Default sort
+        }
+
+        // Execute query
+        const users = await User.find(query)
+            .select('-password')
+            .sort(sortOptions)
+            .skip(skip)
+            .limit(parseInt(limit))
+            .populate('taskerProfile.approvedBy', 'fullName email');
+
+        // Get total count for pagination
+        const total = await User.countDocuments(query);
+
+        // Calculate pagination info
+        const totalPages = Math.ceil(total / parseInt(limit));
+        const hasNextPage = parseInt(page) < totalPages;
+        const hasPrevPage = parseInt(page) > 1;
+
+        // Prepare response data
+        const usersData = users.map(user => {
+            const userObj = user.toObject();
+            
+            // Add computed fields
+            userObj.isActive = !userObj.isSuspended;
+            userObj.approvalStatus = userObj.taskerProfile?.approvalStatus || null;
+            userObj.isApproved = userObj.taskerProfile?.isApproved || false;
+            
+            return userObj;
+        });
+
+        res.json({
+            success: true,
+            message: 'Users retrieved successfully',
+            data: usersData,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                total,
+                totalPages,
+                hasNextPage,
+                hasPrevPage
+            },
+            filters: {
+                search,
+                role,
+                status,
+                sortBy,
+                sortOrder
+            }
+        });
+
+    } catch (error) {
+        console.error('Get all users error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while retrieving users',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
+    }
+};
+
+/**
+ * Get detailed user information
+ * @route GET /api/users/:userId
+ * @access Admin only
+ */
+export const getUserDetails = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'User ID is required'
+            });
+        }
+
+        // Find user with all related data
+        const user = await User.findById(userId)
+            .select('-password')
+            .populate('taskerProfile.approvedBy', 'fullName email');
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Get related data based on user role
+        let relatedData = {};
+
+        if (user.role === 'tasker') {
+            // Get tasks applied to by this tasker
+            const applications = await Application.find({ taskerId: userId })
+                .populate('taskId', 'title description budget status createdAt')
+                .sort({ createdAt: -1 })
+                .limit(10);
+
+            // Get recent feedback received
+            const feedback = await Feedback.find({ taskerId: userId })
+                .populate('customerId', 'fullName')
+                .populate('taskId', 'title')
+                .sort({ createdAt: -1 })
+                .limit(5);
+
+            relatedData = {
+                applications: applications.length,
+                recentApplications: applications,
+                feedback: feedback.length,
+                recentFeedback: feedback
+            };
+        } else if (user.role === 'customer') {
+            // Get tasks posted by this customer
+            const tasks = await Task.find({ customerId: userId })
+                .sort({ createdAt: -1 })
+                .limit(10);
+
+            // Get recent feedback given
+            const feedback = await Feedback.find({ customerId: userId })
+                .populate('taskerId', 'fullName')
+                .populate('taskId', 'title')
+                .sort({ createdAt: -1 })
+                .limit(5);
+
+            relatedData = {
+                tasksPosted: tasks.length,
+                recentTasks: tasks,
+                feedbackGiven: feedback.length,
+                recentFeedback: feedback
+            };
+        }
+
+        // Prepare user data
+        const userData = user.toObject();
+        userData.isActive = !userData.isSuspended;
+        userData.approvalStatus = userData.taskerProfile?.approvalStatus || null;
+        userData.isApproved = userData.taskerProfile?.isApproved || false;
+
+        // Add account age
+        const accountAge = Math.floor((Date.now() - new Date(userData.createdAt)) / (1000 * 60 * 60 * 24));
+        userData.accountAge = accountAge;
+
+        res.json({
+            success: true,
+            message: 'User details retrieved successfully',
+            data: {
+                user: userData,
+                relatedData
+            }
+        });
+
+    } catch (error) {
+        console.error('Get user details error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while retrieving user details',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
+    }
+};
+
+/**
+ * Suspend or unsuspend a user account
+ * @route PUT /api/users/:userId/suspend
+ * @access Admin only
+ */
+export const suspendUser = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { action, reason } = req.body;
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'User ID is required'
+            });
+        }
+
+        if (!action || !['suspend', 'unsuspend'].includes(action)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Action must be either "suspend" or "unsuspend"'
+            });
+        }
+
+        // Find the user
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Check if trying to suspend an admin
+        if (user.role === 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Cannot suspend admin accounts'
+            });
+        }
+
+        // Check current suspension status
+        const isCurrentlySuspended = user.isSuspended || false;
+
+        if (action === 'suspend' && isCurrentlySuspended) {
+            return res.status(400).json({
+                success: false,
+                message: 'User is already suspended'
+            });
+        }
+
+        if (action === 'unsuspend' && !isCurrentlySuspended) {
+            return res.status(400).json({
+                success: false,
+                message: 'User is not currently suspended'
+            });
+        }
+
+        // Update user suspension status
+        const updateData = {
+            isSuspended: action === 'suspend',
+            suspendedAt: action === 'suspend' ? new Date() : null,
+            suspendedBy: action === 'suspend' ? req.user._id : null,
+            suspensionReason: action === 'suspend' ? reason : null
+        };
+
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            updateData,
+            { new: true, runValidators: true }
+        ).select('-password');
+
+        // Log admin action
+        try {
+            const AdminActionLog = (await import('../models/AdminActionLog.js')).default;
+            await AdminActionLog.create({
+                adminId: req.user._id,
+                actionType: action === 'suspend' ? 'USER_SUSPENDED' : 'USER_UNSUSPENDED',
+                targetId: userId,
+                targetModel: 'User',
+                details: `${action === 'suspend' ? 'Suspended' : 'Unsuspended'} user account`,
+                ipAddress: req.ip,
+                userAgent: req.get('User-Agent'),
+                metadata: {
+                    reason: action === 'suspend' ? reason : null,
+                    previousStatus: isCurrentlySuspended ? 'suspended' : 'active'
+                }
+            });
+        } catch (logError) {
+            console.error('Failed to log admin action:', logError);
+        }
+
+        res.json({
+            success: true,
+            message: `User ${action === 'suspend' ? 'suspended' : 'unsuspended'} successfully`,
+            data: {
+                user: updatedUser,
+                action,
+                reason: action === 'suspend' ? reason : null,
+                suspendedAt: updatedUser.suspendedAt,
+                suspendedBy: updatedUser.suspendedBy
+            }
+        });
+
+    } catch (error) {
+        console.error('Suspend user error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while processing the suspension',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
     }
 };

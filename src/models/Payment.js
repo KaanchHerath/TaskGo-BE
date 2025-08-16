@@ -94,6 +94,23 @@ const paymentSchema = new mongoose.Schema({
   refundAmount: {
     type: Number,
     min: [0, 'Refund amount cannot be negative']
+  },
+  // Platform commission fields
+  platformCommissionRate: {
+    type: Number,
+    default: 0.10, // 10% commission rate
+    min: [0, 'Commission rate cannot be negative'],
+    max: [1, 'Commission rate cannot exceed 100%']
+  },
+  platformCommissionAmount: {
+    type: Number,
+    default: 0,
+    min: [0, 'Commission amount cannot be negative']
+  },
+  taskerEarnings: {
+    type: Number,
+    default: 0,
+    min: [0, 'Tasker earnings cannot be negative']
   }
 }, {
   timestamps: true,
@@ -122,6 +139,21 @@ paymentSchema.methods.canBeRefunded = function() {
   return this.status === 'completed' && !this.refundedAt;
 };
 
+paymentSchema.methods.calculatePlatformCommission = function() {
+  if (this.paymentType === 'advance') {
+    this.platformCommissionAmount = Math.round(this.amount * this.platformCommissionRate);
+    this.taskerEarnings = this.amount - this.platformCommissionAmount;
+  } else {
+    // For final payments, no platform commission
+    this.platformCommissionAmount = 0;
+    this.taskerEarnings = this.amount;
+  }
+  return {
+    platformCommission: this.platformCommissionAmount,
+    taskerEarnings: this.taskerEarnings
+  };
+};
+
 // Static methods
 paymentSchema.statics.getPaymentsByTask = function(taskId) {
   return this.find({ task: taskId })
@@ -142,6 +174,31 @@ paymentSchema.statics.getPaymentsByTasker = function(taskerId) {
     .populate('task', 'title category')
     .populate('customer', 'fullName email')
     .sort({ createdAt: -1 });
+};
+
+paymentSchema.statics.getPlatformRevenue = function(startDate = null, endDate = null) {
+  const matchQuery = { 
+    status: 'completed',
+    paymentType: 'advance' // Only advance payments generate platform revenue
+  };
+  
+  if (startDate || endDate) {
+    matchQuery.processedAt = {};
+    if (startDate) matchQuery.processedAt.$gte = startDate;
+    if (endDate) matchQuery.processedAt.$lte = endDate;
+  }
+
+  return this.aggregate([
+    { $match: matchQuery },
+    {
+      $group: {
+        _id: null,
+        totalRevenue: { $sum: '$platformCommissionAmount' },
+        totalPayments: { $sum: 1 },
+        averageCommission: { $avg: '$platformCommissionAmount' }
+      }
+    }
+  ]);
 };
 
 export default mongoose.model('Payment', paymentSchema);
