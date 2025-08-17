@@ -1,5 +1,6 @@
 import Payment from '../models/Payment.js';
 import Task from '../models/Task.js';
+import Application from '../models/Application.js';
 import crypto from 'crypto';
 import dotenv from "dotenv";
 
@@ -251,19 +252,27 @@ export const handlePaymentNotification = async (req, res) => {
       return res.status(404).json({ error: 'Payment not found' });
     }
 
-    // Verify MD5 signature
-    const receivedMd5sig = md5sig;
-    const calculatedMd5sig = crypto.createHash('md5')
-      .update(Object.keys(req.body)
-        .filter(key => key !== 'md5sig')
-        .sort()
-        .map(key => `${key}=${req.body[key]}`)
-        .join('&') + PAYHERE_CONFIG.MERCHANT_SECRET)
-      .digest('hex')
-      .toUpperCase();
+    // Verify MD5 signature using PayHere formula:
+    // md5sig = toUpperCase(md5(merchant_id + order_id + payhere_amount + payhere_currency + status_code + toUpperCase(md5(merchant_secret))))
+    const receivedMd5sig = (md5sig || '').toUpperCase();
+    const merchantSecretHash = crypto.createHash('md5').update(PAYHERE_CONFIG.MERCHANT_SECRET || '').digest('hex').toUpperCase();
+    const signatureString = `${merchant_id}${order_id}${payhere_amount}${payhere_currency}${status_code}${merchantSecretHash}`;
+    const calculatedMd5sig = crypto.createHash('md5').update(signatureString).digest('hex').toUpperCase();
 
     if (receivedMd5sig !== calculatedMd5sig) {
-      console.error('MD5 signature verification failed');
+      console.error('MD5 signature verification failed', {
+        receivedMd5sig,
+        calculatedMd5sig,
+        debug: {
+          merchant_id,
+          order_id,
+          payhere_amount,
+          payhere_currency,
+          status_code,
+          merchantSecretHash,
+          signatureString
+        }
+      });
       return res.status(400).json({ error: 'Invalid signature' });
     }
 
@@ -287,6 +296,26 @@ export const handlePaymentNotification = async (req, res) => {
         task.advancePaymentDate = new Date();
         task.status = 'scheduled';
         await task.save();
+
+        // Update applications: confirm selected tasker, reject all others
+        try {
+          const workingTaskerId = task.selectedTasker || task.targetedTasker;
+          if (workingTaskerId) {
+            // Confirm the selected/working tasker's application
+            await Application.updateOne(
+              { task: task._id, tasker: workingTaskerId },
+              { $set: { status: 'confirmed' } }
+            );
+
+            // Reject all other applications still pending or confirmed incorrectly
+            await Application.updateMany(
+              { task: task._id, tasker: { $ne: workingTaskerId }, status: { $ne: 'rejected' } },
+              { $set: { status: 'rejected' } }
+            );
+          }
+        } catch (appErr) {
+          console.error('Error updating applications after scheduling:', appErr);
+        }
         
         console.log('Task scheduled after successful payment:', {
           taskId: task._id,

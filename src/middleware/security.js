@@ -22,7 +22,16 @@ export const corsMiddleware = cors({
     
     // In development mode, allow all origins for easier testing
     if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-      console.log('Development mode - allowing origin:', origin);
+      // Only log unique origins to reduce console spam
+      if (!corsMiddleware._loggedOrigins) {
+        corsMiddleware._loggedOrigins = new Set();
+      }
+      
+      if (!corsMiddleware._loggedOrigins.has(origin)) {
+        console.log('Development mode - allowing new origin:', origin);
+        corsMiddleware._loggedOrigins.add(origin);
+      }
+      
       return callback(null, true);
     }
     
