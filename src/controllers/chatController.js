@@ -143,6 +143,39 @@ export const sendMessage = async (req, res) => {
     await chatMessage.populate('receiverId', 'fullName email');
     await chatMessage.populate('taskId', 'title');
 
+    // Emit WebSocket event for real-time messaging
+    try {
+      const io = req.app.get('io');
+      console.log('🔌 WebSocket emission attempt:', { io: !!io, app: !!req.app });
+      
+      if (io) {
+        const messageData = {
+          message: chatMessage,
+          taskId: taskId,
+          senderId: senderId,
+          receiverId: receiverId
+        };
+        
+        console.log('📤 Emitting chat-message event:', messageData);
+        
+        // Emit to the receiver's room
+        io.to(`user-${receiverId}`).emit('chat-message', messageData);
+        
+        // Also emit to the sender's room for confirmation
+        io.to(`user-${senderId}`).emit('message-sent', {
+          message: chatMessage,
+          taskId: taskId
+        });
+        
+        console.log(`✅ WebSocket chat message sent to user ${receiverId}`);
+        console.log(`✅ WebSocket message-sent confirmation sent to user ${senderId}`);
+      } else {
+        console.error('❌ WebSocket io instance not available');
+      }
+    } catch (wsError) {
+      console.error('❌ WebSocket chat notification error:', wsError);
+    }
+
     res.status(201).json({
       success: true,
       message: 'Message sent successfully',

@@ -9,7 +9,7 @@ import logger from '../utils/logger.js';
 const commonSchemas = {
   objectId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required(),
   email: Joi.string().email().required(),
-  password: Joi.string().min(6).required(),
+  password: Joi.string().min(8).required(),
   phone: Joi.string().pattern(/^\+?[\d\s\-\(\)]+$/).min(10).max(15),
   pagination: {
     page: Joi.number().integer().min(1).default(1),

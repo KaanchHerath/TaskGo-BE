@@ -9,16 +9,63 @@ export const registerUser = async (req, res) => {
     const { name, email, password, role } = req.body;
 
     try {
+        // Validate input
+        if (!name || !email || !password || !role) {
+            return res.status(400).json({ 
+                message: "Please provide all required fields: name, email, password, and role",
+                errorType: "missing_fields"
+            });
+        }
+
+        // Check if email format is valid
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ 
+                message: "Please enter a valid email address",
+                errorType: "invalid_email"
+            });
+        }
+
+        // Check password strength
+        if (password.length < 8) {
+            return res.status(400).json({ 
+                message: "Password must be at least 8 characters long",
+                errorType: "weak_password"
+            });
+        }
+
         const existingUser = await User.findOne({ email });
-        if (existingUser) return res.status(400).json({ message: "User already exists" });
+        if (existingUser) {
+            return res.status(400).json({ 
+                message: "An account with this email already exists. Please use a different email or try logging in.",
+                errorType: "duplicate_email"
+            });
+        }
 
         const hashedPassword = await bcrypt.hash(password, 10);
         const newUser = new User({ name, email, password: hashedPassword, role });
 
         await newUser.save();
-        res.status(201).json({ message: "User registered successfully" });
+        res.status(201).json({ 
+            message: "Account created successfully! You can now log in.",
+            success: true
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error('Registration error:', error);
+        
+        if (error.name === 'ValidationError') {
+            const validationErrors = Object.values(error.errors).map(err => err.message);
+            return res.status(400).json({ 
+                message: "Please check your input and try again",
+                errors: validationErrors,
+                errorType: "validation_error"
+            });
+        }
+        
+        res.status(500).json({ 
+            message: "We're experiencing technical difficulties. Please try again later.",
+            errorType: "server_error"
+        });
     }
 };
 
@@ -26,11 +73,38 @@ export const loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     try {
+        // Validate input
+        if (!email || !password) {
+            return res.status(400).json({ 
+                message: "Please provide both email and password",
+                errorType: "missing_fields"
+            });
+        }
+
+        // Check if email format is valid
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ 
+                message: "Please enter a valid email address",
+                errorType: "invalid_email"
+            });
+        }
+
         const user = await User.findOne({ email });
-        if (!user) return res.status(404).json({ message: "User not found" });
+        if (!user) {
+            return res.status(401).json({ 
+                message: "Invalid email or password. Please check your credentials and try again.",
+                errorType: "invalid_credentials"
+            });
+        }
 
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+        if (!isMatch) {
+            return res.status(401).json({ 
+                message: "Invalid email or password. Please check your credentials and try again.",
+                errorType: "invalid_credentials"
+            });
+        }
 
         // Check if user is suspended
         if (user.isSuspended) {
@@ -82,7 +156,26 @@ export const loginUser = async (req, res) => {
         });
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({ message: "An error occurred during login" });
+        
+        // Provide more specific error messages based on error type
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ 
+                message: "Please check your input and try again",
+                errorType: "validation_error"
+            });
+        }
+        
+        if (error.name === 'MongoError' && error.code === 11000) {
+            return res.status(400).json({ 
+                message: "An account with this email already exists",
+                errorType: "duplicate_email"
+            });
+        }
+        
+        res.status(500).json({ 
+            message: "We're experiencing technical difficulties. Please try again later.",
+            errorType: "server_error"
+        });
     }
 };
 

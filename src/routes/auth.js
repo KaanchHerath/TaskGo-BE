@@ -112,64 +112,130 @@ router.post("/register", async (req, res) => {
     
     // Validate basic inputs
     if (!username || !email || !phone || !password || !role || !fullName) {
-      return res.status(400).json({ message: "All basic fields are required" });
+      return res.status(400).json({ 
+        message: "Please complete all required fields to continue with registration.",
+        errorType: "missing_fields",
+        fields: {
+          username: !username,
+          email: !email,
+          phone: !phone,
+          password: !password,
+          role: !role,
+          fullName: !fullName
+        }
+      });
     }
 
     // Validate email format
     if (!validateEmail(email)) {
-      return res.status(400).json({ message: "Invalid email format" });
+      return res.status(400).json({ 
+        message: "Please enter a valid email address in the format: example@domain.com",
+        errorType: "invalid_email",
+        field: "email"
+      });
     }
 
     // Validate phone format
     if (!validatePhone(phone)) {
-      return res.status(400).json({ message: "Invalid phone number format" });
+      return res.status(400).json({ 
+        message: "Please enter a valid phone number. Format: +94XXXXXXXXX or 07XXXXXXXX",
+        errorType: "invalid_phone",
+        field: "phone"
+      });
     }
 
     // Validate password strength
     const passwordError = validatePassword(password);
     if (passwordError) {
-      return res.status(400).json({ message: passwordError });
+      return res.status(400).json({ 
+        message: passwordError,
+        errorType: "weak_password",
+        field: "password"
+      });
     }
 
     // Validate role
     if (!['customer', 'tasker'].includes(role)) {
-      return res.status(400).json({ message: "Invalid role specified" });
+      return res.status(400).json({ 
+        message: "Please select a valid account type (Customer or Tasker).",
+        errorType: "invalid_role",
+        field: "role"
+      });
     }
 
     // Validate required fields based on role
     if (role === 'customer' && !province) {
-      return res.status(400).json({ message: "Province is required for customers" });
+      return res.status(400).json({ 
+        message: "Please select your province to help us provide location-based services.",
+        errorType: "missing_province",
+        field: "province"
+      });
     }
 
     if (role === 'tasker') {
       if (!skills || !skills.length) {
-        return res.status(400).json({ message: "At least one skill is required for taskers" });
+        return res.status(400).json({ 
+          message: "Please select at least one skill to help customers find you for relevant tasks.",
+          errorType: "missing_skills",
+          field: "skills"
+        });
       }
       if (!country) {
-        return res.status(400).json({ message: "Country is required for taskers" });
+        return res.status(400).json({ 
+          message: "Please select your country to help us provide location-based services.",
+          errorType: "missing_country",
+          field: "country"
+        });
       }
       if (!area) {
-        return res.status(400).json({ message: "Area is required for taskers" });
+        return res.status(400).json({ 
+          message: "Please specify your service area to help customers find you.",
+          errorType: "missing_area",
+          field: "area"
+        });
       }
       if (!identificationDocument) {
-        return res.status(400).json({ message: "Identification document is required for taskers" });
+        return res.status(400).json({ 
+          message: "Please upload your identification document for verification purposes.",
+          errorType: "missing_id_document",
+          field: "identificationDocument"
+        });
       }
       if (!qualificationDocuments || !qualificationDocuments.length) {
-        return res.status(400).json({ message: "At least one qualification document is required for taskers" });
+        return res.status(400).json({ 
+          message: "Please upload at least one qualification document to verify your expertise.",
+          errorType: "missing_qualification_documents",
+          field: "qualificationDocuments"
+        });
       }
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({
-      $or: [
-        { email: email.toLowerCase() },
-        { phone: phone },
-        { username: username.toLowerCase() }
-      ]
-    });
+    // Check if user already exists with specific field checks
+    const existingEmail = await User.findOne({ email: email.toLowerCase() });
+    if (existingEmail) {
+      return res.status(400).json({ 
+        message: "An account with this email address already exists. Please use a different email or try logging in.",
+        errorType: "duplicate_email",
+        field: "email"
+      });
+    }
 
-    if (existingUser) {
-      return res.status(400).json({ message: "User with this email, phone, or username already exists" });
+    const existingPhone = await User.findOne({ phone: phone });
+    if (existingPhone) {
+      return res.status(400).json({ 
+        message: "This phone number is already registered. Please use a different phone number or contact support if this is your number.",
+        errorType: "duplicate_phone",
+        field: "phone"
+      });
+    }
+
+    const existingUsername = await User.findOne({ username: username.toLowerCase() });
+    if (existingUsername) {
+      return res.status(400).json({ 
+        message: "This username is already taken. Please choose a different username.",
+        errorType: "duplicate_username",
+        field: "username"
+      });
     }
     
     const salt = await bcrypt.genSalt(10);
@@ -214,7 +280,55 @@ router.post("/register", async (req, res) => {
     });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ message: "An error occurred during registration" });
+    
+    // Handle specific database errors
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ 
+        message: "Please check your input and try again.",
+        errorType: "validation_error",
+        details: validationErrors
+      });
+    }
+    
+    if (error.name === 'MongoError' && error.code === 11000) {
+      // Handle duplicate key errors
+      const field = Object.keys(error.keyPattern)[0];
+      let message = "This information is already registered.";
+      
+      if (field === 'email') {
+        message = "An account with this email address already exists. Please use a different email or try logging in.";
+      } else if (field === 'phone') {
+        message = "This phone number is already registered. Please use a different phone number or contact support if this is your number.";
+      } else if (field === 'username') {
+        message = "This username is already taken. Please choose a different username.";
+      }
+      
+      return res.status(400).json({ 
+        message,
+        errorType: "duplicate_field",
+        field: field
+      });
+    }
+    
+    if (error.name === 'MongooseError' && error.message.includes('buffering timed out')) {
+      return res.status(503).json({ 
+        message: "Database connection timeout. Please try again later.",
+        errorType: "db_timeout"
+      });
+    }
+    
+    if (error.name === 'MongoNetworkError') {
+      return res.status(503).json({ 
+        message: "Database network error. Please try again later.",
+        errorType: "db_network_error"
+      });
+    }
+    
+    res.status(500).json({ 
+      message: "We're experiencing technical difficulties. Please try again later or contact support if the problem persists.",
+      errorType: "server_error"
+    });
   }
 });
 

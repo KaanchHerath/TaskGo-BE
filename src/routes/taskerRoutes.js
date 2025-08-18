@@ -5,7 +5,9 @@ import {
     getTaskerById, 
     updateTaskerAvailability,
     getTaskerProfile,
-    getTaskerReviews 
+    getTaskerReviews,
+    uploadQualificationDocuments,
+    removeQualificationDocument
 } from "../controllers/taskerController.js";
 import { verifyToken, authorize } from "../middleware/auth.js";
 
@@ -20,5 +22,7 @@ router.get("/:id/reviews", getTaskerReviews);
 
 // Protected routes
 router.put("/availability", verifyToken, authorize(['tasker']), updateTaskerAvailability);
+router.post("/qualification-documents", verifyToken, authorize(['tasker']), uploadQualificationDocuments);
+router.delete("/qualification-documents/:documentId", verifyToken, authorize(['tasker']), removeQualificationDocument);
 
 export default router;

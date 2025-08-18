@@ -322,6 +322,24 @@ export const handlePaymentNotification = async (req, res) => {
           orderId: order_id,
           paymentId: payment_id
         });
+
+        // Emit WebSocket event to notify frontend of successful payment
+        try {
+          // Get the io instance from the app
+          const io = req.app.get('io');
+          if (io) {
+            // Emit to the specific user's room
+            io.to(`user-${task.customer._id}`).emit('payment-success', {
+              taskId: task._id,
+              orderId: order_id,
+              paymentId: payment_id,
+              message: 'Payment successful! Task has been scheduled.'
+            });
+            console.log(`WebSocket notification sent to user ${task.customer._id}`);
+          }
+        } catch (wsError) {
+          console.error('WebSocket notification error:', wsError);
+        }
       }
     } else {
       // Payment failed

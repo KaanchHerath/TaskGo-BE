@@ -1,7 +1,78 @@
 import express from 'express';
 import mongoose from 'mongoose';
+import { verifyToken } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// @route   GET /api/health
+// @desc    Health check endpoint
+// @access  Public
+router.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Server is running',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+// @route   GET /api/health/websocket
+// @desc    Test WebSocket connection
+// @access  Public
+router.get('/websocket', (req, res) => {
+  const io = req.app.get('io');
+  
+  if (io) {
+    // Test emit to all connected clients
+    io.emit('test-message', {
+      message: 'WebSocket test message',
+      timestamp: new Date().toISOString()
+    });
+    
+    res.status(200).json({
+      success: true,
+      message: 'WebSocket test message sent',
+      ioAvailable: true
+    });
+  } else {
+    res.status(500).json({
+      success: false,
+      message: 'WebSocket not available',
+      ioAvailable: false
+    });
+  }
+});
+
+// @route   POST /api/health/websocket-test
+// @desc    Test WebSocket with specific user
+// @access  Private
+router.post('/websocket-test', verifyToken, (req, res) => {
+  const { userId, message } = req.body;
+  const io = req.app.get('io');
+  
+  if (io && userId) {
+    // Test emit to specific user room
+    io.to(`user-${userId}`).emit('test-message', {
+      message: message || 'Test message from admin',
+      timestamp: new Date().toISOString(),
+      from: 'admin'
+    });
+    
+    res.status(200).json({
+      success: true,
+      message: 'WebSocket test message sent to user',
+      userId,
+      ioAvailable: true
+    });
+  } else {
+    res.status(400).json({
+      success: false,
+      message: 'WebSocket not available or userId missing',
+      ioAvailable: !!io,
+      userId: !!userId
+    });
+  }
+});
 
 // Health check endpoint
 router.get('/health', (req, res) => {

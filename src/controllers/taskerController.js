@@ -63,6 +63,7 @@ export const getAllTaskers = async (req, res) => {
             skills,
             province,
             district,
+            area,
             minRating,
             maxHourlyRate,
             sortBy = 'rating.average',
@@ -97,12 +98,37 @@ export const getAllTaskers = async (req, res) => {
             query['rating.average'] = { $gte: Number(minRating) };
         }
         
+        // Build combined OR/AND conditions for search and area
+        const searchOrClauses = [];
+        const areaOrClauses = [];
+
         // Search in name or skills
         if (search) {
-            query.$or = [
+            searchOrClauses.push(
                 { fullName: { $regex: search, $options: 'i' } },
                 { 'taskerProfile.skills': { $regex: search, $options: 'i' } }
+            );
+        }
+
+        // Area matches either province or district (case-insensitive)
+        if (area) {
+            const areaRegex = new RegExp(area, 'i');
+            areaOrClauses.push(
+                { 'taskerProfile.province': areaRegex },
+                { 'taskerProfile.district': areaRegex }
+            );
+        }
+
+        // Apply boolean logic: if both search and area present => AND, otherwise single OR
+        if (searchOrClauses.length && areaOrClauses.length) {
+            query.$and = [
+                { $or: searchOrClauses },
+                { $or: areaOrClauses }
             ];
+        } else if (searchOrClauses.length) {
+            query.$or = searchOrClauses;
+        } else if (areaOrClauses.length) {
+            query.$or = areaOrClauses;
         }
 
         // Calculate pagination
@@ -525,6 +551,143 @@ export const getTaskerReviews = async (req, res) => {
         res.status(500).json({ 
             success: false,
             message: "Server error while fetching tasker reviews" 
+        });
+    }
+};
+
+// @desc    Upload qualification documents for tasker
+// @route   POST /api/taskers/qualification-documents
+// @access  Private (Tasker only)
+export const uploadQualificationDocuments = async (req, res) => {
+    try {
+        const taskerId = req.user.id;
+
+        if (!req.files || Object.keys(req.files).length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No files were uploaded'
+            });
+        }
+
+        // Verify tasker exists
+        const tasker = await User.findOne({ _id: taskerId, role: "tasker" });
+        if (!tasker) {
+            return res.status(404).json({
+                success: false,
+                message: 'Tasker not found'
+            });
+        }
+
+        const uploadedFiles = [];
+        const files = Array.isArray(req.files.qualificationDocuments) 
+            ? req.files.qualificationDocuments 
+            : [req.files.qualificationDocuments];
+
+        for (const file of files) {
+            // Validate file type
+            const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+            if (!allowedTypes.includes(file.mimetype)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `File type ${file.mimetype} is not allowed. Only PDF and image files are supported.`
+                });
+            }
+
+            // Validate file size (10MB limit)
+            if (file.size > 10 * 1024 * 1024) {
+                return res.status(400).json({
+                    success: false,
+                    message: `File ${file.name} is too large. Maximum size is 10MB.`
+                });
+            }
+
+            // Generate unique filename
+            const timestamp = Date.now();
+            const randomString = Math.random().toString(36).substring(2, 15);
+            const fileExtension = file.name.split('.').pop();
+            const filename = `qualification-${timestamp}-${randomString}.${fileExtension}`;
+
+            // Move file to uploads directory
+            const uploadPath = `./uploads/tasker-docs/${filename}`;
+            await file.mv(uploadPath);
+
+            uploadedFiles.push(`uploads/tasker-docs/${filename}`);
+        }
+
+        // Update tasker profile with new documents
+        const updatedTasker = await User.findByIdAndUpdate(
+            taskerId,
+            {
+                $push: {
+                    'taskerProfile.qualificationDocuments': { $each: uploadedFiles }
+                }
+            },
+            { new: true }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Qualification documents uploaded successfully',
+            data: uploadedFiles
+        });
+    } catch (error) {
+        console.error('Upload qualification documents error:', error);
+        res.status(500).json({ 
+            success: false,
+            message: "Server error while uploading qualification documents" 
+        });
+    }
+};
+
+// @desc    Remove qualification document for tasker
+// @route   DELETE /api/taskers/qualification-documents/:documentId
+// @access  Private (Tasker only)
+export const removeQualificationDocument = async (req, res) => {
+    try {
+        const taskerId = req.user.id;
+        const { documentId } = req.params;
+
+        // Verify tasker exists
+        const tasker = await User.findOne({ _id: taskerId, role: "tasker" });
+        if (!tasker) {
+            return res.status(404).json({
+                success: false,
+                message: 'Tasker not found'
+            });
+        }
+
+        // Find the document in the tasker's profile
+        const documentIndex = tasker.taskerProfile?.qualificationDocuments?.findIndex(
+            doc => doc.includes(documentId) || doc.split('/').pop().split('.')[0] === documentId
+        );
+
+        if (documentIndex === -1 || documentIndex === undefined) {
+            return res.status(404).json({
+                success: false,
+                message: 'Document not found'
+            });
+        }
+
+        // Remove the document from the array
+        const updatedTasker = await User.findByIdAndUpdate(
+            taskerId,
+            {
+                $pull: {
+                    'taskerProfile.qualificationDocuments': tasker.taskerProfile.qualificationDocuments[documentIndex]
+                }
+            },
+            { new: true }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Qualification document removed successfully'
+        });
+    } catch (error) {
+        console.error('Remove qualification document error:', error);
+        res.status(500).json({ 
+            success: false,
+            message: "Server error while removing qualification document" 
         });
     }
 }; 
