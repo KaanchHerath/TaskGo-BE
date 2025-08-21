@@ -18,6 +18,46 @@ export const testAdminEndpoint = async (req, res) => {
 };
 
 /**
+ * Test database connectivity and basic operations
+ * @route GET /api/admin/test-db
+ * @access Admin only
+ */
+export const testDatabaseConnection = async (req, res) => {
+    try {
+        // Test basic database operations
+        const taskCount = await Task.countDocuments();
+        const userCount = await User.countDocuments();
+        const applicationCount = await Application.countDocuments();
+        
+        // Test a simple query
+        const sampleTask = await Task.findOne().select('_id title status');
+        
+        res.json({
+            success: true,
+            message: 'Database connection test successful',
+            data: {
+                taskCount,
+                userCount,
+                applicationCount,
+                sampleTask,
+                timestamp: new Date().toISOString()
+            }
+        });
+    } catch (error) {
+        logger.error('Database connection test failed', {
+            error: error.message,
+            stack: error.stack
+        });
+        
+        res.status(500).json({
+            success: false,
+            message: 'Database connection test failed',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
+    }
+};
+
+/**
  * Get all users (existing functionality)
  */
 export const getAllUsers = async (req, res) => {
@@ -34,10 +74,20 @@ export const getAllUsers = async (req, res) => {
  */
 export const deleteUser = async (req, res) => {
     try {
-        await User.findByIdAndDelete(req.params.id);
-        res.json({ message: "User deleted successfully" });
+        const { userId, id } = req.params;
+        const targetId = userId || id;
+        if (!targetId) {
+            return res.status(400).json({ success: false, message: 'User ID is required' });
+        }
+
+        const deleted = await User.findByIdAndDelete(targetId);
+        if (!deleted) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        return res.json({ success: true, message: "User deleted successfully", data: { userId: targetId } });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        return res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -48,34 +98,62 @@ export const deleteUser = async (req, res) => {
  */
 export const getPendingTaskers = async (req, res) => {
     try {
-        const { page = 1, limit = 20, status } = req.query;
-        const skip = (page - 1) * limit;
+        const { page = 1, limit = 20, status, search = '', province = '', district = '', experience = '', skills = '', sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+        const numericPage = parseInt(page);
+        const numericLimit = parseInt(limit);
+        const skip = (numericPage - 1) * numericLimit;
 
-        // Build query: always filter by isApproved: false
-        let query = { role: 'tasker', 'taskerProfile.isApproved': false };
-        if (status === 'pending') {
+        // Base query: only taskers not yet approved
+        const query = { role: 'tasker', 'taskerProfile.isApproved': false };
+
+        // Status filter
+        if (status === 'pending' || !status) {
             query['taskerProfile.approvalStatus'] = 'pending';
         } else if (status === 'rejected') {
             query['taskerProfile.approvalStatus'] = 'rejected';
         } else if (status === 'all') {
-            // Show all unapproved taskers regardless of approvalStatus
-            // No additional filter needed
+            // no-op
         }
 
-        // Get pending taskers with pagination
+        // Search filter
+        if (search && String(search).trim()) {
+            const term = String(search).trim();
+            query.$or = [
+                { fullName: { $regex: term, $options: 'i' } },
+                { email: { $regex: term, $options: 'i' } },
+                { phone: { $regex: term, $options: 'i' } }
+            ];
+        }
+
+        // Location filters
+        if (province) query['taskerProfile.province'] = province;
+        if (district) query['taskerProfile.district'] = district;
+
+        // Experience
+        if (experience) query['taskerProfile.experience'] = experience;
+
+        // Skills contains
+        if (skills && String(skills).trim()) {
+            query['taskerProfile.skills'] = { $elemMatch: { $regex: String(skills).trim(), $options: 'i' } };
+        }
+
+        // Sorting
+        const validSortFields = new Set(['createdAt', 'fullName', 'taskerProfile.province', 'taskerProfile.experience']);
+        const sortField = validSortFields.has(sortBy) ? sortBy : 'createdAt';
+        const sortDir = String(sortOrder).toLowerCase() === 'asc' ? 1 : -1;
+        const sortOptions = { [sortField]: sortDir };
+
+        // Query with pagination
         const taskers = await User.find(query)
             .select('fullName email phone taskerProfile createdAt')
-            .sort({ createdAt: -1 })
+            .sort(sortOptions)
             .skip(skip)
-            .limit(parseInt(limit));
+            .limit(numericLimit);
 
-        // Get total count for pagination
         const total = await User.countDocuments(query);
-
-        // Calculate pagination info
-        const totalPages = Math.ceil(total / limit);
-        const hasNextPage = page < totalPages;
-        const hasPrevPage = page > 1;
+        const totalPages = Math.ceil(total / numericLimit);
+        const hasNextPage = numericPage < totalPages;
+        const hasPrevPage = numericPage > 1;
 
         // Log admin action
         await AdminActionLog.create({
@@ -87,10 +165,13 @@ export const getPendingTaskers = async (req, res) => {
             ipAddress: req.ip,
             userAgent: req.get('User-Agent'),
             metadata: {
-                status: status || 'all',
-                page: parseInt(page),
-                limit: parseInt(limit),
-                totalResults: total
+                status: status || 'pending',
+                page: numericPage,
+                limit: numericLimit,
+                totalResults: total,
+                filters: { search, province, district, experience, skills },
+                sortBy: sortField,
+                sortOrder: sortDir === 1 ? 'asc' : 'desc'
             }
         });
 
@@ -99,8 +180,8 @@ export const getPendingTaskers = async (req, res) => {
             message: `Retrieved unapproved taskers successfully`,
             data: taskers,
             pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
+                page: numericPage,
+                limit: numericLimit,
                 total,
                 totalPages,
                 hasNextPage,
@@ -1040,55 +1121,149 @@ export const getAllTasks = async (req, res) => {
             sortOptions.createdAt = -1; // Default sort
         }
 
-        // Execute query
-        const tasks = await Task.find(query)
-            .populate('customer', 'fullName email phone')
-            .populate('selectedTasker', 'fullName email phone')
-            .populate('targetedTasker', 'fullName email phone')
-            .sort(sortOptions)
-            .skip(skip)
-            .limit(parseInt(limit));
+        logger.info('Executing simplified getAllTasks query', {
+            query,
+            sortOptions,
+            skip,
+            limit: parseInt(limit),
+            adminId: req.user?._id
+        });
 
-        // Get application counts for each task
-        const tasksWithApplications = await Promise.all(
-            tasks.map(async (task) => {
-                const applicationCount = await Application.countDocuments({ task: task._id });
-                return {
-                    ...task.toObject(),
-                    applicationCount
-                };
-            })
-        );
+        // Execute query with minimal, safe population of related user fields
+        let tasks;
+        try {
+            tasks = await Task.find(query)
+                .select('_id title description category status minPayment maxPayment area startDate endDate customer selectedTasker targetedTasker createdAt updatedAt')
+                .populate('customer', 'fullName name firstName phone phoneNumber')
+                .populate('selectedTasker', 'fullName name firstName phone phoneNumber')
+                .populate('targetedTasker', 'fullName name firstName phone phoneNumber')
+                .sort(sortOptions)
+                .skip(skip)
+                .limit(parseInt(limit))
+                .lean();
+        } catch (queryError) {
+            logger.error('Error during basic Task query', {
+                error: queryError.message,
+                stack: queryError.stack,
+                query,
+                adminId: req.user?._id
+            });
+            throw new Error(`Database query error: ${queryError.message}`);
+        }
 
         // Get total count for pagination
-        const total = await Task.countDocuments(query);
+        let total;
+        try {
+            total = await Task.countDocuments(query);
+        } catch (countError) {
+            logger.error('Error counting total tasks', {
+                error: countError.message,
+                stack: countError.stack,
+                query,
+                adminId: req.user?._id
+            });
+            total = 0;
+        }
 
         // Calculate pagination info
         const totalPages = Math.ceil(total / parseInt(limit));
         const hasNextPage = parseInt(page) < totalPages;
         const hasPrevPage = parseInt(page) > 1;
 
-        // Log admin action
-        await AdminActionLog.create({
-            adminId: req.user._id,
-            actionType: 'TASKS_VIEWED',
-            targetId: req.user._id,
-            targetModel: 'Task',
-            details: 'Admin viewed all tasks',
-            ipAddress: req.ip,
-            userAgent: req.get('User-Agent'),
-            metadata: {
-                filters: { status, category, customerId, taskerId, dateFrom, dateTo },
-                page: parseInt(page),
-                limit: parseInt(limit),
-                totalResults: total
+        // Load applications for these tasks to compute agreedPayment and include applications summary
+        let applicationsByTaskId = new Map();
+        try {
+            const taskIds = tasks.map(t => t._id);
+            if (taskIds.length > 0) {
+                const apps = await Application.find({ task: { $in: taskIds } })
+                    .select('_id task tasker proposedPayment confirmedPayment status confirmedByTasker createdAt')
+                    .populate('tasker', 'fullName email phone')
+                    .sort({ createdAt: -1 })
+                    .lean();
+
+                for (const app of apps) {
+                    const key = String(app.task);
+                    if (!applicationsByTaskId.has(key)) applicationsByTaskId.set(key, []);
+                    applicationsByTaskId.get(key).push({
+                        _id: app._id,
+                        proposedPayment: app.proposedPayment,
+                        confirmedPayment: app.confirmedPayment,
+                        status: app.status,
+                        confirmedByTasker: app.confirmedByTasker,
+                        createdAt: app.createdAt,
+                        tasker: app.tasker ? {
+                            _id: app.tasker._id,
+                            fullName: app.tasker.fullName,
+                            email: app.tasker.email,
+                            phone: app.tasker.phone
+                        } : null
+                    });
+                }
             }
+        } catch (appsError) {
+            logger.warn('Failed to load applications for tasks', {
+                error: appsError.message,
+                stack: appsError.stack,
+                adminId: req.user?._id
+            });
+        }
+
+        // Attach computed fields and applications list; set agreedPayment from selected tasker application proposedPayment
+        const tasksWithBasicData = tasks.map(task => {
+            const taskIdStr = String(task._id);
+            const apps = applicationsByTaskId.get(taskIdStr) || [];
+
+            let computedAgreedPayment = task.agreedPayment || null;
+            if (task.selectedTasker) {
+                const selectedApp = apps.find(a => a.tasker && String(a.tasker._id) === String(task.selectedTasker._id || task.selectedTasker));
+                if (selectedApp) {
+                    computedAgreedPayment = selectedApp.confirmedPayment || selectedApp.proposedPayment || computedAgreedPayment;
+                }
+            }
+
+            return {
+                ...task,
+                applicationCount: apps.length,
+                applications: apps,
+                agreedPayment: computedAgreedPayment
+            };
+        });
+
+        // Log admin action (target is the admin User, not a Task document)
+        try {
+            await AdminActionLog.create({
+                adminId: req.user._id,
+                actionType: 'TASKS_VIEWED',
+                targetId: req.user._id,
+                targetModel: 'User',
+                details: 'Admin viewed all tasks (simplified)',
+                ipAddress: req.ip,
+                userAgent: req.get('User-Agent'),
+                metadata: {
+                    filters: { status, category, customerId, taskerId, dateFrom, dateTo },
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    totalResults: total
+                }
+            });
+        } catch (logError) {
+            logger.warn('Failed to log admin action', {
+                error: logError.message,
+                adminId: req.user?._id
+            });
+            // Don't fail the request if logging fails
+        }
+
+        logger.info('Simplified getAllTasks completed successfully', {
+            totalTasks: total,
+            returnedTasks: tasksWithBasicData.length,
+            adminId: req.user?._id
         });
 
         res.json({
             success: true,
-            message: 'Tasks retrieved successfully',
-            data: tasksWithApplications,
+            message: 'Tasks retrieved successfully (simplified mode)',
+            data: tasksWithBasicData,
             pagination: {
                 page: parseInt(page),
                 limit: parseInt(limit),
@@ -1110,8 +1285,9 @@ export const getAllTasks = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in getAllTasks', {
+        logger.error('Error in simplified getAllTasks', {
             error: error.message,
+            stack: error.stack,
             adminId: req.user?._id,
             query: req.query
         });

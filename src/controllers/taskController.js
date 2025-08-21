@@ -2,6 +2,8 @@ import Task from '../models/Task.js';
 import Application from '../models/Application.js';
 import User from '../models/User.js';
 import mongoose from 'mongoose';
+import fs from 'fs';
+import path from 'path';
 
 // @desc    Create new task
 // @route   POST /api/tasks
@@ -366,6 +368,24 @@ export const applyForTask = async (req, res) => {
     await application.populate('tasker', 'fullName email phone skills rating');
     await application.populate('task', 'title category area');
 
+    // Emit WebSocket event to task owner about new application
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user-${task.customer}`).emit('task-update', {
+          type: 'application-submitted',
+          taskId: task._id,
+          taskTitle: application.task?.title,
+          applicantId: application.tasker?._id,
+          applicantName: application.tasker?.fullName,
+          message: `${application.tasker?.fullName || 'A tasker'} applied to your task ${application.task?.title || ''}`,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (wsError) {
+      console.error('❌ WebSocket task update (application-submitted) error:', wsError);
+    }
+
     res.status(201).json({
       success: true,
       message: 'Application submitted successfully',
@@ -616,6 +636,31 @@ export const selectTasker = async (req, res) => {
         selectedTasker: task.selectedTasker
       });
 
+      // Emit WebSocket event to selected tasker and customer
+      try {
+        const io = req.app.get('io');
+        if (io) {
+          // Notify selected tasker
+          io.to(`user-${task.selectedTasker._id || task.selectedTasker}`).emit('task-update', {
+            type: 'tasker-selected',
+            taskId: task._id,
+            taskTitle: task.title,
+            message: `You have been selected for task ${task.title}. Please proceed to confirm and complete payment process.`,
+            timestamp: new Date().toISOString()
+          });
+          // Notify customer (confirmation info)
+          io.to(`user-${task.customer._id || task.customer}`).emit('task-update', {
+            type: 'tasker-selected',
+            taskId: task._id,
+            taskTitle: task.title,
+            message: `You selected a tasker for task ${task.title}. Awaiting payment to schedule.`,
+            timestamp: new Date().toISOString()
+          });
+        }
+      } catch (wsError) {
+        console.error('❌ WebSocket task update (tasker-selected) error:', wsError);
+      }
+
       res.status(200).json({
         success: true,
         message: 'Tasker selected successfully. Please complete the advance payment to schedule the task.',
@@ -793,6 +838,22 @@ export const confirmTime = async (req, res) => {
     await application.populate('task', 'title category area startDate endDate minPayment maxPayment');
     await application.populate('tasker', 'fullName email phone');
 
+    // Notify task owner that tasker confirmed availability
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user-${task.customer}`).emit('task-update', {
+          type: 'availability-confirmed',
+          taskId: task._id,
+          taskTitle: task.title,
+          message: `${application.tasker?.fullName || 'Tasker'} confirmed availability for ${task.title}.`,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (wsError) {
+      console.error('❌ WebSocket task update (availability-confirmed) error:', wsError);
+    }
+
     res.status(200).json({
       success: true,
       message: 'Availability confirmed successfully',
@@ -861,6 +922,22 @@ export const confirmSchedule = async (req, res) => {
     await task.populate('customer', 'fullName email phone');
     await task.populate('selectedTasker', 'fullName email phone');
     await task.populate('targetedTasker', 'fullName email phone');
+
+    // Notify customer that the tasker confirmed schedule
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user-${task.customer._id || task.customer}`).emit('task-update', {
+          type: 'schedule-confirmed',
+          taskId: task._id,
+          taskTitle: task.title,
+          message: `${task.selectedTasker?.fullName || 'Tasker'} confirmed the schedule for ${task.title}.`,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (wsError) {
+      console.error('❌ WebSocket task update (schedule-confirmed) error:', wsError);
+    }
 
     res.status(200).json({
       success: true,
@@ -937,6 +1014,22 @@ export const completeTask = async (req, res) => {
     await task.populate('selectedTasker', 'fullName email phone');
     await task.populate('targetedTasker', 'fullName email phone');
 
+    // Notify selected tasker that customer completed the task
+    try {
+      const io = req.app.get('io');
+      if (io && task.selectedTasker) {
+        io.to(`user-${task.selectedTasker._id || task.selectedTasker}`).emit('task-update', {
+          type: 'task-completed-by-customer',
+          taskId: task._id,
+          taskTitle: task.title,
+          message: `Customer marked ${task.title} as completed.`,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (wsError) {
+      console.error('❌ WebSocket task update (task-completed-by-customer) error:', wsError);
+    }
+
     res.status(200).json({
       success: true,
       message: 'Task completed successfully',
@@ -992,13 +1085,29 @@ export const taskerCompleteTask = async (req, res) => {
 
     // Update task with completion details
     if (completionPhotos) task.completionPhotos = completionPhotos;
-    if (notes) task.notes = notes;
+    if (notes) task.completionNotes = notes;
     
     await task.save();
 
     await task.populate('customer', 'fullName email phone');
     await task.populate('selectedTasker', 'fullName email phone');
     await task.populate('targetedTasker', 'fullName email phone');
+
+    // Notify customer that tasker marked task as complete
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user-${task.customer._id || task.customer}`).emit('task-update', {
+          type: 'task-completed-by-tasker',
+          taskId: task._id,
+          taskTitle: task.title,
+          message: `${(task.selectedTasker && task.selectedTasker.fullName) || 'Tasker'} marked ${task.title} as complete. Please review and confirm.`,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (wsError) {
+      console.error('❌ WebSocket task update (task-completed-by-tasker) error:', wsError);
+    }
 
     res.status(200).json({
       success: true,
@@ -1430,13 +1539,26 @@ export const uploadTaskPhotos = async (req, res) => {
         });
       }
 
-      // For now, create a data URL (in production, upload to cloud storage)
-      const base64 = photo.data.toString('base64');
-      const dataUrl = `data:${photo.mimetype};base64,${base64}`;
-      
+      // Save file to disk similar to completion photos: uploads/tasks/<userId>/<filename>
+      const userId = String(req.user._id);
+      const baseUploadsDir = path.join(process.cwd(), 'uploads', 'tasks', userId);
+      fs.mkdirSync(baseUploadsDir, { recursive: true });
+
+      const originalExt = path.extname(photo.name) || '.jpg';
+      const safeExt = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(originalExt.toLowerCase())
+        ? originalExt
+        : '.jpg';
+
+      const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`;
+      const targetPath = path.join(baseUploadsDir, filename);
+
+      await photo.mv(targetPath);
+
+      const relativeUrl = `/uploads/tasks/${userId}/${filename}`;
+
       uploadedPhotos.push({
-        url: dataUrl,
-        filename: photo.name,
+        url: relativeUrl,
+        filename,
         size: photo.size,
         mimetype: photo.mimetype
       });
@@ -1460,9 +1582,11 @@ export const uploadTaskPhotos = async (req, res) => {
 // @access  Private (Taskers only)
 export const uploadCompletionPhoto = async (req, res) => {
   try {
-    // For now, we'll create a simple mock upload that converts the file to a data URL
-    // In production, you'd upload to AWS S3, Cloudinary, or similar service
-    
+    const { taskId } = req.body;
+    if (!taskId) {
+      return res.status(400).json({ success: false, message: 'taskId is required' });
+    }
+
     if (!req.files || !req.files.photo) {
       return res.status(400).json({
         success: false,
@@ -1470,8 +1594,14 @@ export const uploadCompletionPhoto = async (req, res) => {
       });
     }
 
+    // Optional: ensure the task exists and the requester is related (basic existence check)
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Task not found' });
+    }
+
     const photo = req.files.photo;
-    
+
     // Validate file type
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     if (!allowedTypes.includes(photo.mimetype)) {
@@ -1489,22 +1619,37 @@ export const uploadCompletionPhoto = async (req, res) => {
       });
     }
 
-    // For now, create a data URL (in production, upload to cloud storage)
-    const base64 = photo.data.toString('base64');
-    const dataUrl = `data:${photo.mimetype};base64,${base64}`;
+    // Create destination directory: uploads/completions/<taskId>
+    const baseUploadsDir = path.join(process.cwd(), 'uploads', 'completions', String(taskId));
+    fs.mkdirSync(baseUploadsDir, { recursive: true });
 
-    res.status(200).json({
+    // Preserve extension from original filename
+    const originalExt = path.extname(photo.name) || '.jpg';
+    const safeExt = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(originalExt.toLowerCase())
+      ? originalExt
+      : '.jpg';
+
+    const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`;
+    const targetPath = path.join(baseUploadsDir, filename);
+
+    // Save file to disk
+    await photo.mv(targetPath);
+
+    // Build server-relative URL for static serving
+    const relativeUrl = `/uploads/completions/${taskId}/${filename}`;
+
+    return res.status(200).json({
       success: true,
       data: {
-        url: dataUrl,
-        filename: photo.name,
+        url: relativeUrl,
+        filename,
         size: photo.size,
         mimetype: photo.mimetype
       }
     });
   } catch (error) {
     console.error('Upload completion photo error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Server error while uploading photo'
     });

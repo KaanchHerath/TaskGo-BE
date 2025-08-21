@@ -17,7 +17,8 @@ import {
     updateTaskStatus,
     getTaskStats,
     getUserStats,
-    getPaymentStats
+    getPaymentStats,
+    testDatabaseConnection
 } from "../controllers/adminController.js";
 
 import { 
@@ -47,6 +48,13 @@ router.use(authorize(['admin']));
  * @access Admin only
  */
 router.get("/test", testAdminEndpoint);
+
+/**
+ * @route GET /api/admin/test-db
+ * @desc Test database connectivity and basic operations
+ * @access Admin only
+ */
+router.get("/test-db", testDatabaseConnection);
 
 /**
  * @route GET /api/admin/dashboard/stats

@@ -123,8 +123,8 @@ const taskSchema = new mongoose.Schema({
     validate: {
       validator: function(value) {
         if (!value || value.trim() === '') return true; // Allow empty strings
-        // Allow http/https URLs and data URLs
-        return /^(https?:\/\/.+\.(jpg|jpeg|png|gif|webp)|data:image\/)/.test(value);
+        // Allow http/https URLs, data URLs, and server-relative uploads paths
+        return /^(https?:\/\/|data:image\/|\/?uploads\/).+\.(jpg|jpeg|png|gif|webp)$/i.test(value);
       },
       message: 'Invalid photo URL format'
     }
@@ -160,8 +160,8 @@ const taskSchema = new mongoose.Schema({
     validate: {
       validator: function(value) {
         if (!value || value.trim() === '') return true; // Allow empty strings
-        // Allow http/https URLs, blob URLs, and data URLs
-        return /^(https?:\/\/.+\.(jpg|jpeg|png|gif|webp)|blob:http|data:image)/.test(value);
+        // Allow http/https URLs, blob URLs, data URLs, and server-relative uploads paths
+        return /^(https?:\/\/|blob:http|data:image|\/?uploads\/).+\.(jpg|jpeg|png|gif|webp)$/i.test(value);
       },
       message: 'Invalid completion photo URL format'
     }

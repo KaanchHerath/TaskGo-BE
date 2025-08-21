@@ -8,21 +8,19 @@ export const securityMiddleware = helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
+      imgSrc: ["'self'", "data:", "https:", "http:"],
     },
   },
   crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
 });
 
 // CORS configuration
 export const corsMiddleware = cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // In development mode, allow all origins for easier testing
     if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-      // Only log unique origins to reduce console spam
       if (!corsMiddleware._loggedOrigins) {
         corsMiddleware._loggedOrigins = new Set();
       }
@@ -39,8 +37,7 @@ export const corsMiddleware = cors({
       'http://localhost:3000'
 
     ];
-    
-    // Add FRONTEND_URL from environment if it exists
+
     if (process.env.FRONTEND_URL) {
       allowedOrigins.push(process.env.FRONTEND_URL);
     }
@@ -57,7 +54,7 @@ export const corsMiddleware = cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
-  optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
+  optionsSuccessStatus: 200 
 });
 
 

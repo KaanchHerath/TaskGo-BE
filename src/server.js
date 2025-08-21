@@ -28,11 +28,29 @@ dotenv.config();
 
 const app = express();
 const server = createServer(app);
+const IS_TEST = process.env.NODE_ENV === 'test';
 
 // Socket.IO setup with authentication middleware
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3001",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+].filter(Boolean);
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    // Reflect request origin in development; enforce allowlist in production
+    origin: (origin, callback) => {
+      const isDev = process.env.NODE_ENV !== 'production';
+      if (!origin) return callback(null, true);
+      if (isDev) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('Not allowed by CORS'));
+    },
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -142,6 +160,23 @@ io.on('connection', (socket) => {
   });
 });
 
+// Log engine-level connection errors to diagnose handshake/CORS problems
+io.engine.on('connection_error', (err) => {
+  console.error('⚠️  Socket.IO engine connection_error:', {
+    code: err.code,
+    message: err.message,
+    context: err.context && {
+      name: err.context?.name,
+      message: err.context?.message,
+      headers: err.context?.headers,
+      status: err.context?.status,
+      method: err.context?.method,
+      url: err.context?.url,
+      transport: err.context?.transport,
+    }
+  });
+});
+
 // Make io available to other modules
 app.set('io', io);
 console.log('🔌 Socket.IO instance set on app:', !!io);
@@ -186,14 +221,17 @@ app.use('*', notFoundHandler);
 // Global error handling middleware
 app.use(errorHandler);
 
-// Initialize database connection
-connectDB();
+// Initialize database connection only outside test environment
+if (!IS_TEST) {
+  connectDB();
+}
 
-// Start server
-const PORT = process.env.PORT || 5000;
-
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Start server only outside test environment
+if (!IS_TEST) {
+  const PORT = process.env.PORT || 5000;
+  server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
 export default app;

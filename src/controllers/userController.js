@@ -533,16 +533,63 @@ export const getAllUsers = async (req, res) => {
             query.isSuspended = { $ne: true };
         }
 
+        // Province filter (matches customer and tasker profiles)
+        if (req.query.province) {
+            const province = req.query.province;
+            query.$or = (query.$or || []).concat([
+                { 'taskerProfile.province': province },
+                { 'customerProfile.province': province }
+            ]);
+        }
+
+        // Registration date filter
+        if (req.query.registrationDate) {
+            const now = new Date();
+            let startDate = null;
+            const value = String(req.query.registrationDate);
+            switch (value) {
+                case 'today':
+                    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    break;
+                case 'week': {
+                    const dayOfWeek = now.getDay();
+                    const diffToMonday = (dayOfWeek + 6) % 7; // 0=>Mon
+                    startDate = new Date(now);
+                    startDate.setDate(now.getDate() - diffToMonday);
+                    startDate.setHours(0,0,0,0);
+                    break;
+                }
+                case 'month':
+                    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                    break;
+                case 'quarter': {
+                    const currentQuarter = Math.floor(now.getMonth() / 3);
+                    startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
+                    break;
+                }
+                case 'year':
+                    startDate = new Date(now.getFullYear(), 0, 1);
+                    break;
+                default:
+                    startDate = null;
+            }
+            if (startDate) {
+                query.createdAt = { $gte: startDate };
+            }
+        }
+
         // Pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
         // Sort options
         const sortOptions = {};
-        const validSortFields = ['createdAt', 'fullName', 'email', 'rating.average', 'statistics.tasksCompleted'];
+        const validSortFields = ['createdAt', 'fullName', 'email', 'role', 'isSuspended', 'rating.average', 'statistics.tasksCompleted', 'lastActive'];
         const validSortOrders = ['asc', 'desc'];
 
         if (validSortFields.includes(sortBy) && validSortOrders.includes(sortOrder)) {
-            sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
+            // Map frontend 'lastActive' to 'updatedAt'
+            const sortField = sortBy === 'lastActive' ? 'updatedAt' : sortBy;
+            sortOptions[sortField] = sortOrder === 'desc' ? -1 : 1;
         } else {
             sortOptions.createdAt = -1; // Default sort
         }
@@ -571,6 +618,9 @@ export const getAllUsers = async (req, res) => {
             userObj.isActive = !userObj.isSuspended;
             userObj.approvalStatus = userObj.taskerProfile?.approvalStatus || null;
             userObj.isApproved = userObj.taskerProfile?.isApproved || false;
+            userObj.province = userObj.taskerProfile?.province || userObj.customerProfile?.province || null;
+            userObj.district = userObj.taskerProfile?.district || null;
+            userObj.lastActive = userObj.updatedAt || null;
             
             return userObj;
         });
