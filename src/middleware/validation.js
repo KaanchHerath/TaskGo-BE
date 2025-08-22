@@ -1,5 +1,5 @@
 import Joi from 'joi';
-import logger from '../utils/logger.js';
+
 
 /**
  * Validation middleware using Joi schemas
@@ -141,10 +141,10 @@ const validate = (schema, property = 'body') => {
 
     if (error) {
       const errors = error.details.map(detail => detail.message);
-      logger.warn('Validation failed', { 
+              // Validation failed 
         endpoint: req.originalUrl, 
         errors 
-      });
+      };
       
       return res.status(400).json({
         success: false,
@@ -157,7 +157,7 @@ const validate = (schema, property = 'body') => {
     req[property] = value;
     next();
   };
-};
+
 
 // Export validation functions
 export const validateAuth = {

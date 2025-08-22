@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
-import logger from "../utils/logger.js";
+
 
 export const protect = async (req, res, next) => {
     let token;
@@ -30,7 +30,7 @@ export const optionalAuth = async (req, res, next) => {
             req.user = await User.findById(decoded.userId).select("-password");
         } catch (error) {
             // Token is invalid, but we don't fail - just continue without user
-            logger.debug("Invalid token provided, continuing without authentication");
+            // Invalid token provided, continuing without authentication
             req.user = null;
         }
     }

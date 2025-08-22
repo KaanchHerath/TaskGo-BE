@@ -1,5 +1,6 @@
 import JobRequest from "../models/JobRequest.js";
 import User from "../models/User.js";
+import Task from "../models/Task.js";
 
 export const getDashboardStats = async (req, res) => {
     try {
@@ -51,35 +52,38 @@ export const getCustomerStats = async (req, res) => {
         }
 
         // Get active tasks for the customer
-        const activeTasks = await JobRequest.countDocuments({
-            customerId: customerId,
+        const activeTasks = await Task.countDocuments({
+            customer: customerId,
             status: { $nin: ['completed', 'cancelled'] }
         });
 
         // Get completed tasks for the customer
-        const completedTasks = await JobRequest.countDocuments({
-            customerId: customerId,
+        const completedTasks = await Task.countDocuments({
+            customer: customerId,
             status: 'completed'
         });
 
         // Calculate total spent on completed tasks
-        const completedJobRequests = await JobRequest.find({
-            customerId: customerId,
+        const completedTasksData = await Task.find({
+            customer: customerId,
             status: 'completed'
         });
 
-        const totalSpent = completedJobRequests.reduce((sum, job) => {
-            return sum + (job.agreedPayment || job.budget || 0);
+        const totalSpent = completedTasksData.reduce((sum, task) => {
+            return sum + (task.agreedPayment || 0);
         }, 0);
 
-        // Estimate money saved (assuming 20% savings compared to traditional services)
-        const estimatedSavings = Math.round(totalSpent * 0.2);
+        // Get scheduled tasks for the customer
+        const scheduledTasks = await Task.countDocuments({
+            customer: customerId,
+            status: 'scheduled'
+        });
 
         res.json({
             activeTasks,
             completedTasks,
             totalSpent,
-            savedMoney: estimatedSavings
+            scheduledTasks
         });
     } catch (error) {
         res.status(500).json({ 
@@ -91,6 +95,7 @@ export const getCustomerStats = async (req, res) => {
 
 // Get tasker-specific statistics
 export const getTaskerStats = async (req, res) => {
+
     try {
         const { taskerId } = req.params;
         
@@ -111,11 +116,10 @@ export const getTaskerStats = async (req, res) => {
             status: 'completed'
         });
 
-        // Get this month's earnings from advance payments (20% of agreed payment)
+        // Get this month's earnings from completed tasks (20% of agreed payment)
         const thisMonthTasks = await Task.find({
             selectedTasker: taskerId,
             status: 'completed',
-            advancePaymentStatus: 'released',
             updatedAt: { $gte: startOfMonth }
         });
 
@@ -125,12 +129,11 @@ export const getTaskerStats = async (req, res) => {
             return sum + advanceAmount;
         }, 0);
 
-        // Get total earnings from advance payments (20% of agreed payment)
-        // Only count tasks that are completed and have advance payment released
+        // Get total earnings from completed tasks (20% of agreed payment)
+        // Count all completed tasks regardless of advance payment status
         const allCompletedTasks = await Task.find({
             selectedTasker: taskerId,
-            status: 'completed',
-            advancePaymentStatus: 'released'
+            status: 'completed'
         });
 
         const totalEarnings = allCompletedTasks.reduce((sum, task) => {
@@ -144,12 +147,23 @@ export const getTaskerStats = async (req, res) => {
         const tasker = await User.findById(taskerId);
         const averageRating = tasker?.rating?.average || 0;
 
-        res.json({
+        const responseData = {
             thisMonth,
             totalEarnings,
             completedTasks,
             averageRating
-        });
+        };
+
+        // If no completed tasks found, return default values 
+        if (completedTasks === 0) {
+            responseData = {
+                thisMonth: 0,
+                totalEarnings: 0,
+                completedTasks: 0,
+                averageRating: 0
+            };
+        }
+        res.json(responseData);
     } catch (error) {
         res.status(500).json({ 
             message: "Error fetching tasker statistics", 

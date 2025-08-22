@@ -28,12 +28,12 @@ const taskSchema = new mongoose.Schema({
   minPayment: {
     type: Number,
     required: [true, 'Minimum payment is required'],
-    min: [1, 'Minimum payment must be at least $1']
+    min: [1, 'Minimum payment must be at least LKR1']
   },
   maxPayment: {
     type: Number,
     required: [true, 'Maximum payment is required'],
-    min: [1, 'Maximum payment must be at least $1'],
+    min: [1, 'Maximum payment must be at least LKR1'],
     validate: {
       validator: function(value) {
         // Check if minPayment exists and is a valid number
@@ -47,7 +47,7 @@ const taskSchema = new mongoose.Schema({
   },
   agreedPayment: {
     type: Number,
-    min: [1, 'Agreed payment must be at least $1'],
+    min: [1, 'Agreed payment must be at least LKR1'],
     validate: {
       validator: function(value) {
         // Allow agreed payment to be set during tasker selection
@@ -58,7 +58,7 @@ const taskSchema = new mongoose.Schema({
         }
         return true;
       },
-      message: 'Agreed payment must be at least $1'
+      message: 'Agreed payment must be at least LKR1'
     }
   },
   agreedTime: {
@@ -122,8 +122,8 @@ const taskSchema = new mongoose.Schema({
     type: String,
     validate: {
       validator: function(value) {
-        if (!value || value.trim() === '') return true; // Allow empty strings
-        // Allow http/https URLs, data URLs, and server-relative uploads paths
+        if (!value || value.trim() === '') return true; 
+        
         return /^(https?:\/\/|data:image\/|\/?uploads\/).+\.(jpg|jpeg|png|gif|webp)$/i.test(value);
       },
       message: 'Invalid photo URL format'
@@ -159,8 +159,8 @@ const taskSchema = new mongoose.Schema({
     type: String,
     validate: {
       validator: function(value) {
-        if (!value || value.trim() === '') return true; // Allow empty strings
-        // Allow http/https URLs, blob URLs, data URLs, and server-relative uploads paths
+        if (!value || value.trim() === '') return true; 
+        
         return /^(https?:\/\/|blob:http|data:image|\/?uploads\/).+\.(jpg|jpeg|png|gif|webp)$/i.test(value);
       },
       message: 'Invalid completion photo URL format'
@@ -330,6 +330,7 @@ taskSchema.statics.getTasksByCustomer = function(customerId, status = null) {
   return this.find(query)
     .populate('selectedTasker', 'fullName email phone')
     .populate('targetedTasker', 'fullName email phone')
+    .populate('applications') // Populate the applications virtual
     .sort({ createdAt: -1 });
 };
 

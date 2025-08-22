@@ -383,7 +383,7 @@ export const applyForTask = async (req, res) => {
         });
       }
     } catch (wsError) {
-      console.error('❌ WebSocket task update (application-submitted) error:', wsError);
+      console.error('WebSocket task update (application-submitted) error:', wsError);
     }
 
     res.status(201).json({
@@ -658,7 +658,7 @@ export const selectTasker = async (req, res) => {
           });
         }
       } catch (wsError) {
-        console.error('❌ WebSocket task update (tasker-selected) error:', wsError);
+        console.error('WebSocket task update (tasker-selected) error:', wsError);
       }
 
       res.status(200).json({
@@ -851,7 +851,7 @@ export const confirmTime = async (req, res) => {
         });
       }
     } catch (wsError) {
-      console.error('❌ WebSocket task update (availability-confirmed) error:', wsError);
+      console.error('WebSocket task update (availability-confirmed) error:', wsError);
     }
 
     res.status(200).json({
@@ -936,7 +936,7 @@ export const confirmSchedule = async (req, res) => {
         });
       }
     } catch (wsError) {
-      console.error('❌ WebSocket task update (schedule-confirmed) error:', wsError);
+      console.error('WebSocket task update (schedule-confirmed) error:', wsError);
     }
 
     res.status(200).json({
@@ -1027,7 +1027,7 @@ export const completeTask = async (req, res) => {
         });
       }
     } catch (wsError) {
-      console.error('❌ WebSocket task update (task-completed-by-customer) error:', wsError);
+      console.error('WebSocket task update (task-completed-by-customer) error:', wsError);
     }
 
     res.status(200).json({
@@ -1106,7 +1106,7 @@ export const taskerCompleteTask = async (req, res) => {
         });
       }
     } catch (wsError) {
-      console.error('❌ WebSocket task update (task-completed-by-tasker) error:', wsError);
+      console.error('WebSocket task update (task-completed-by-tasker) error:', wsError);
     }
 
     res.status(200).json({
@@ -1219,15 +1219,27 @@ export const getTasksByCustomerId = async (req, res) => {
     const tasks = await Task.find(query)
       .populate('selectedTasker', 'fullName email rating statistics')
       .populate('targetedTasker', 'fullName email rating statistics')
+      .populate('applications') // Populate applications virtual
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
+
+    // Manually populate application count for each task to ensure consistency
+    const tasksWithApplicationCount = await Promise.all(
+      tasks.map(async (task) => {
+        const applicationCount = await Application.countDocuments({ task: task._id });
+        return {
+          ...task.toObject(),
+          applicationCount: applicationCount || (task.applications ? task.applications.length : 0)
+        };
+      })
+    );
 
     const total = await Task.countDocuments(query);
 
     res.status(200).json({
       success: true,
-      data: tasks,
+      data: tasksWithApplicationCount,
       pagination: {
         page: Number(page),
         limit: Number(limit),

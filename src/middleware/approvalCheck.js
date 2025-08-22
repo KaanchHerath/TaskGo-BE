@@ -1,5 +1,5 @@
 import User from '../models/User.js';
-import logger from '../utils/logger.js';
+
 
 /**
  * Middleware to check if a tasker is approved

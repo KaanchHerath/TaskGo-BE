@@ -17,29 +17,14 @@ const PAYHERE_CONFIG = {
   CANCEL_URL: process.env.PAYHERE_CANCEL_URL 
 };
 
-// Debug: Log configuration on module load
-console.log('PayHere Configuration loaded:', {
-  MERCHANT_ID: PAYHERE_CONFIG.MERCHANT_ID ? 'SET' : 'NOT SET',
-  MERCHANT_SECRET: PAYHERE_CONFIG.MERCHANT_SECRET ? 'SET' : 'NOT SET',
-  NODE_ENV: process.env.NODE_ENV,
-  NOTIFY_URL: PAYHERE_CONFIG.NOTIFY_URL,
-  RETURN_URL: PAYHERE_CONFIG.RETURN_URL,
-  CANCEL_URL: PAYHERE_CONFIG.CANCEL_URL
-});
+
 
 // @desc    Initialize advance payment
 // @route   POST /api/payments/initiate-advance
 // @access  Private (Customer only)
 export const initiateAdvancePayment = async (req, res) => {
   try {
-    // Debug: Log current configuration state
-    console.log('Payment initiation - Current config:', {
-      MERCHANT_ID: PAYHERE_CONFIG.MERCHANT_ID ? 'SET' : 'NOT SET',
-      MERCHANT_SECRET: PAYHERE_CONFIG.MERCHANT_SECRET ? 'SET' : 'NOT SET',
-      NODE_ENV: process.env.NODE_ENV,
-      PAYHERE_MERCHANT_ID_ENV: process.env.PAYHERE_MERCHANT_ID ? 'SET' : 'NOT SET',
-      PAYHERE_MERCHANT_SECRET_ENV: process.env.PAYHERE_MERCHANT_SECRET ? 'SET' : 'NOT SET'
-    });
+
 
     // Check if PayHere credentials are configured
     if (!PAYHERE_CONFIG.MERCHANT_ID || !PAYHERE_CONFIG.MERCHANT_SECRET) {
@@ -167,16 +152,7 @@ export const initiateAdvancePayment = async (req, res) => {
     const hashString = PAYHERE_CONFIG.MERCHANT_ID + orderId + advanceAmount.toFixed(2) + 'LKR' + merchantSecretHash;
     const hash = crypto.createHash('md5').update(hashString).digest('hex').toUpperCase();
 
-    // Debug hash generation
-    console.log('Hash generation debug:', {
-      merchantId: PAYHERE_CONFIG.MERCHANT_ID,
-      orderId,
-      amount: advanceAmount.toFixed(2),
-      currency: 'LKR',
-      merchantSecretHash,
-      hashString,
-      finalHash: hash
-    });
+
 
     // Add signature to payment data
     paymentData.md5sig = md5sig;
@@ -190,13 +166,7 @@ export const initiateAdvancePayment = async (req, res) => {
     // Determine which PayHere URL to use based on environment
     const paymentUrl = process.env.NODE_ENV === 'production' ? PAYHERE_CONFIG.LIVE_URL : PAYHERE_CONFIG.SANDBOX_URL;
 
-    console.log('Payment initiated successfully:', {
-      orderId,
-      amount: advanceAmount,
-      merchantId: PAYHERE_CONFIG.MERCHANT_ID,
-      paymentUrl,
-      environment: process.env.NODE_ENV
-    });
+
 
     res.status(200).json({
       success: true,
@@ -239,7 +209,7 @@ export const handlePaymentNotification = async (req, res) => {
       card_expiry
     } = req.body;
 
-    console.log('PayHere Notification:', req.body);
+
 
     // Verify merchant ID
     if (merchant_id !== PAYHERE_CONFIG.MERCHANT_ID) {

@@ -3,7 +3,7 @@ import AdminActionLog from "../models/AdminActionLog.js";
 import Task from "../models/Task.js";
 import Payment from "../models/Payment.js";
 import Application from "../models/Application.js";
-import logger from "../utils/logger.js";
+
 
 /**
  * Test endpoint to verify admin controller is working
@@ -58,7 +58,7 @@ export const testDatabaseConnection = async (req, res) => {
 };
 
 /**
- * Get all users (existing functionality)
+ * Get all users 
  */
 export const getAllUsers = async (req, res) => {
     try {
@@ -70,7 +70,7 @@ export const getAllUsers = async (req, res) => {
 };
 
 /**
- * Delete user (existing functionality)
+ * Delete user 
  */
 export const deleteUser = async (req, res) => {
     try {
