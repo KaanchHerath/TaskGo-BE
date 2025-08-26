@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import User from "./User.js";
 
 const adminSchema = new mongoose.Schema({
-    permissions: [{ type: String, required: true }] // Example: ['MANAGE_USERS', 'VIEW_REPORTS']
+    permissions: [{ type: String, required: true }] 
 });
 
 const Admin = User.discriminator("Admin", adminSchema);

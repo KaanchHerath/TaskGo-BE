@@ -25,7 +25,7 @@ const taskSchema = new mongoose.Schema({
       message: 'Invalid category selected'
     }
   },
-  minPayment: {
+  minPayment: { 
     type: Number,
     required: [true, 'Minimum payment is required'],
     min: [1, 'Minimum payment must be at least LKR1']

@@ -1,7 +1,6 @@
 import express from "express";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
-import jwt from "jsonwebtoken";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import connectDB from "./config/db.js";
@@ -22,7 +21,7 @@ import { securityMiddleware, corsMiddleware } from "./middleware/security.js";
 import { fileUploadMiddleware } from "./middleware/fileUpload.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { jobsRouteProtection } from "./middleware/routeProtection.js";
-import User from "./models/User.js";
+import { socketAuth } from "./middleware/socketAuth.js";
 
 dotenv.config();
 
@@ -51,24 +50,7 @@ const io = new Server(server, {
 });
 
 // Socket.IO authentication middleware
-io.use(async (socket, next) => {
-  try {
-    const token = socket.handshake.auth.token;
-    if (!token) {
-      return next(new Error('Authentication error: No token provided'));
-    }
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId).select('-password');
-    if (!user) {
-      return next(new Error('Authentication error: Invalid user'));
-    }
-    socket.user = user;
-    next();
-  } catch (error) {
-    next(new Error('Authentication error: Invalid token'));
-  }
-});
-
+io.use(socketAuth);
 
 io.on('connection', (socket) => {
   const user = socket.user;
