@@ -1,4 +1,6 @@
-# TaskGo Backend API
+
+# TaskGo Backend
+
 
 TaskGo is an on-demand gig worker platform that connects customers with skilled local service providers in real-time. This backend API ensures seamless service matching, secure transactions, and flexible scheduling, making everyday tasks effortless.
 
@@ -48,13 +50,7 @@ Create a `.env` file in the root directory:
 PORT=5000
 NODE_ENV=development
 
-# Database Configuration
-MONGODB_URI=mongodb://localhost:27017/taskgo
-MONGODB_URI_PROD=mongodb+srv://username:password@cluster.mongodb.net/taskgo
 
-# JWT Configuration
-JWT_SECRET=your-super-secret-jwt-key
-JWT_EXPIRES_IN=7d
 
 # PayHere Configuration
 PAYHERE_MERCHANT_ID=your_merchant_id
@@ -276,4 +272,6 @@ For technical support:
 
 **Last Updated**: January 2025  
 **Version**: 1.0.0  
-**Maintainer**: TaskGo Development Team
+
+**Maintainer**: Kanchana Herath
+
