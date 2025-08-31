@@ -48,13 +48,6 @@ Create a `.env` file in the root directory:
 PORT=5000
 NODE_ENV=development
 
-# Database Configuration
-MONGODB_URI=mongodb://localhost:27017/taskgo
-MONGODB_URI_PROD=mongodb+srv://username:password@cluster.mongodb.net/taskgo
-
-# JWT Configuration
-JWT_SECRET=your-super-secret-jwt-key
-JWT_EXPIRES_IN=7d
 
 # PayHere Configuration
 PAYHERE_MERCHANT_ID=your_merchant_id
