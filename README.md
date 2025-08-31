@@ -269,4 +269,4 @@ For technical support:
 
 **Last Updated**: January 2025  
 **Version**: 1.0.0  
-**Maintainer**: TaskGo Development Team
+**Maintainer**: Kanchana Herath
