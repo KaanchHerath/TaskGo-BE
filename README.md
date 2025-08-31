@@ -1,4 +1,6 @@
+
 # TaskGo Backend
+
 
 TaskGo is an on-demand gig worker platform that connects customers with skilled local service providers in real-time. This backend API ensures seamless service matching, secure transactions, and flexible scheduling, making everyday tasks effortless.
 
@@ -47,6 +49,7 @@ Create a `.env` file in the root directory:
 # Server Configuration
 PORT=5000
 NODE_ENV=development
+
 
 
 # PayHere Configuration
@@ -269,4 +272,6 @@ For technical support:
 
 **Last Updated**: January 2025  
 **Version**: 1.0.0  
+
 **Maintainer**: Kanchana Herath
+
