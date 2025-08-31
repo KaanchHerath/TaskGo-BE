@@ -1,4 +1,4 @@
-# TaskGo Backend API
+# TaskGo Backend
 
 TaskGo is an on-demand gig worker platform that connects customers with skilled local service providers in real-time. This backend API ensures seamless service matching, secure transactions, and flexible scheduling, making everyday tasks effortless.
 
