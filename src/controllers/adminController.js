@@ -6,9 +6,7 @@ import Application from "../models/Application.js";
 import logger from "../utils/logger.js";
 
 
-/**
- * Test endpoint to verify admin controller is working
- */
+
 export const testAdminEndpoint = async (req, res) => {
     console.log('Test admin endpoint called');
     res.json({
@@ -219,7 +217,7 @@ export const approveTasker = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Tasker ID is required' });
         }
 
-        // Minimal, admin-forced approval update without extra validations
+
         const update = {
             'taskerProfile.isApproved': true,
             'taskerProfile.approvalStatus': 'approved',
@@ -517,15 +515,10 @@ export const getApprovalStats = async (req, res) => {
     }
 };
 
-/**
- * Helper function to send tasker approval notifications
- * This is a placeholder for email/SMS notification service
- */
+
 const sendTaskerApprovalNotification = async (tasker, status, reason = null) => {
     try {
-        // Placeholder for notification service integration
-        // In a real implementation, this would send email/SMS notifications
-        
+
         const notificationData = {
             taskerId: tasker._id,
             taskerEmail: tasker.email,
@@ -537,11 +530,7 @@ const sendTaskerApprovalNotification = async (tasker, status, reason = null) => 
 
         logger.info('Tasker approval notification sent', notificationData);
 
-        // Example email notification structure:
-        // await emailService.sendTaskerApprovalNotification(notificationData);
-        
-        // Example SMS notification structure:
-        // await smsService.sendTaskerApprovalNotification(notificationData);
+
 
     } catch (error) {
         logger.error('Failed to send tasker approval notification', {
@@ -549,7 +538,7 @@ const sendTaskerApprovalNotification = async (tasker, status, reason = null) => 
             taskerId: tasker._id,
             status
         });
-        // Don't throw error to avoid breaking the main approval flow
+
     }
 };
 
@@ -806,8 +795,8 @@ export const getDashboardStats = async (req, res) => {
             summary: {
                 completionRate: (taskStats.totalTasks || 0) > 0 ? ((taskStats.completedTasks || 0) / taskStats.totalTasks) * 100 : 0,
                 approvalRate: (userStats.totalTaskers || 0) > 0 ? ((userStats.approvedTaskers || 0) / userStats.totalTaskers) * 100 : 0,
-                averageRating: 0, // Would need to calculate from completed tasks
-                platformHealth: 'good', // Could be calculated based on various metrics
+                averageRating: 0, 
+                platformHealth: 'good', 
                 errorSections
             }
         };

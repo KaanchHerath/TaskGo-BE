@@ -22,7 +22,6 @@ const calculateResponseRate = async (taskerId) => {
             ]
         });
 
-        // Get applications (shows responsiveness to opportunities)
         const totalApplications = await Application.countDocuments({
             tasker: taskerId
         });
@@ -31,16 +30,13 @@ const calculateResponseRate = async (taskerId) => {
             return 0; // New tasker with no activity
         }
 
-        // Calculate response rate based on completion rate and activity
         let responseRate = 0;
         
         if (totalTasks > 0) {
             const completionRate = (completedTasks / totalTasks) * 100;
-            // Base response rate on completion rate
             responseRate = Math.min(completionRate, 100);
         }
 
-        // Boost response rate for active taskers (those who apply to jobs)
         if (totalApplications > 0) {
             responseRate = Math.max(responseRate, 85); // Minimum 85% for active taskers
         }
@@ -71,7 +67,6 @@ export const getAllTaskers = async (req, res) => {
             search
         } = req.query;
 
-        // Build query for taskers (only show available taskers)
         const query = { 
             role: "tasker",
             'taskerProfile.isAvailable': true 
@@ -110,7 +105,6 @@ export const getAllTaskers = async (req, res) => {
             );
         }
 
-        // Area matches either province or district (case-insensitive)
         if (area) {
             const areaRegex = new RegExp(area, 'i');
             areaOrClauses.push(
@@ -147,8 +141,6 @@ export const getAllTaskers = async (req, res) => {
 
         // Get total count for pagination
         const total = await User.countDocuments(query);
-
-        // Enhance taskers with additional statistics
         const enhancedTaskers = await Promise.all(
             taskers.map(async (tasker) => {
                 // Get completed tasks count
@@ -157,10 +149,8 @@ export const getAllTaskers = async (req, res) => {
                     status: 'completed'
                 });
 
-                // Get average response time (in hours) - mock for now
                 const avgResponseTime = Math.floor(Math.random() * 4) + 1; // 1-4 hours
 
-                // Calculate hourly rate based on completed tasks (mock calculation)
                 const baseRate = 15 + (tasker.rating?.average || 0) * 5;
                 const experienceBonus = Math.min(completedTasks * 0.5, 15);
                 const hourlyRate = Math.round(baseRate + experienceBonus);
@@ -207,14 +197,13 @@ export const getTopRatedTaskers = async (req, res) => {
 
         const topTaskers = await User.find({ 
             role: "tasker",
-            'taskerProfile.isAvailable': true, // Only show available taskers
-            'rating.count': { $gte: 1 } // Only taskers with at least 1 rating
+            'taskerProfile.isAvailable': true, 
+            'rating.count': { $gte: 1 } 
         })
             .select("-password")
             .sort({ 'rating.average': -1, 'rating.count': -1 })
             .limit(Number(limit));
 
-        // Enhance with additional data
         const enhancedTaskers = await Promise.all(
             topTaskers.map(async (tasker) => {
                 const completedTasks = await Task.countDocuments({
@@ -227,7 +216,6 @@ export const getTopRatedTaskers = async (req, res) => {
                 const experienceBonus = Math.min(completedTasks * 0.5, 15);
                 const hourlyRate = Math.round(baseRate + experienceBonus);
 
-                // Calculate real response rate
                 const responseRate = await calculateResponseRate(tasker._id);
 
                 return {

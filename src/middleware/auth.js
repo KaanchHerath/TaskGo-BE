@@ -20,8 +20,6 @@ export const protect = async (req, res, next) => {
         res.status(401).json({ message: "Not authorized, no token provided" });
     }
 };
-
-// Optional authentication - tries to authenticate if token is present, but doesn't fail if not
 export const optionalAuth = async (req, res, next) => {
     let token;
     if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
@@ -30,12 +28,9 @@ export const optionalAuth = async (req, res, next) => {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             req.user = await User.findById(decoded.userId).select("-password");
         } catch (error) {
-            // Token is invalid, but we don't fail - just continue without user
-            // Invalid token provided, continuing without authentication
             req.user = null;
         }
     }
-    // Continue regardless of whether authentication succeeded
     next();
 };
 
@@ -65,17 +60,17 @@ export const verifyToken = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Fetch the full user document to ensure role and _id are available
+   
     const user = await User.findById(decoded.userId).select("-password");
 
     if (!user) {
       return res.status(401).json({ message: "Invalid token: user not found" });
     }
 
-    req.user = user; // Ensures _id exists for downstream logic
+    req.user = user; 
     next();
   } catch (error) {
-    // Use 401 to indicate authentication failure consistently
+   
     res.status(401).json({ message: "Invalid token" });
   }
 };

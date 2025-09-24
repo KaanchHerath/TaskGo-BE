@@ -145,9 +145,6 @@ export const initiateAdvancePayment = async (req, res) => {
       .join('&') + PAYHERE_CONFIG.MERCHANT_SECRET;
 
     const md5sig = crypto.createHash('md5').update(signatureString).digest('hex').toUpperCase();
-
-    // Generate PayHere hash value as required by JavaScript SDK
-    // hash = to_upper_case(md5(merchant_id + order_id + amount + currency + to_upper_case(md5(merchant_secret))))
     const merchantSecretHash = crypto.createHash('md5').update(PAYHERE_CONFIG.MERCHANT_SECRET).digest('hex').toUpperCase();
     const hashString = PAYHERE_CONFIG.MERCHANT_ID + orderId + advanceAmount.toFixed(2) + 'LKR' + merchantSecretHash;
     const hash = crypto.createHash('md5').update(hashString).digest('hex').toUpperCase();
@@ -176,7 +173,7 @@ export const initiateAdvancePayment = async (req, res) => {
         paymentData,
         orderId,
         amount: advanceAmount,
-        hash // Return the hash for frontend PayHere SDK
+        hash 
       }
     });
 
@@ -266,18 +263,16 @@ export const handlePaymentNotification = async (req, res) => {
         task.advancePaymentDate = new Date();
         task.status = 'scheduled';
         await task.save();
-
-        // Update applications: confirm selected tasker, reject all others
-        try {
+       try {
           const workingTaskerId = task.selectedTasker || task.targetedTasker;
           if (workingTaskerId) {
-            // Confirm the selected/working tasker's application
+
             await Application.updateOne(
               { task: task._id, tasker: workingTaskerId },
               { $set: { status: 'confirmed' } }
             );
 
-            // Reject all other applications still pending or confirmed incorrectly
+
             await Application.updateMany(
               { task: task._id, tasker: { $ne: workingTaskerId }, status: { $ne: 'rejected' } },
               { $set: { status: 'rejected' } }
@@ -292,10 +287,7 @@ export const handlePaymentNotification = async (req, res) => {
           orderId: order_id,
           paymentId: payment_id
         });
-
-        // Emit WebSocket event to notify frontend of successful payment
-        try {
-          // Get the io instance from the app
+       try {
           const io = req.app.get('io');
           if (io) {
             // Emit to the specific user's room
@@ -316,14 +308,14 @@ export const handlePaymentNotification = async (req, res) => {
       payment.status = 'failed';
       payment.failureReason = status_message;
       
-      // Reset task status if payment failed
+     
       const task = await Task.findById(payment.task);
       if (task && task.status === 'active' && task.advancePaymentStatus === 'pending') {
-        // Keep task as active, but clear payment-related fields
+       
         task.advancePaymentStatus = null;
         task.advancePayment = null;
         task.paymentId = null;
-        // Note: We keep selectedTasker and agreedPayment so customer can retry payment
+
         await task.save();
         
         console.log('Task reset to active after payment failure:', {
@@ -382,11 +374,11 @@ export const handlePaymentCancel = async (req, res) => {
       // Reset task status back to active if payment was cancelled
       const task = await Task.findById(payment.task);
       if (task && task.status === 'active' && task.advancePaymentStatus === 'pending') {
-        // Keep task as active, but clear payment-related fields
+      
         task.advancePaymentStatus = null;
         task.advancePayment = null;
         task.paymentId = null;
-        // Note: We keep selectedTasker and agreedPayment so customer can retry payment
+
         await task.save();
         
         console.log('Task reset to active after payment cancellation:', {
@@ -433,12 +425,12 @@ export const releaseAdvancePayment = async (req, res) => {
       });
     }
 
-    // Update task advance payment status
+
     task.advancePaymentStatus = 'released';
     task.advancePaymentReleasedAt = new Date();
     await task.save();
 
-    // Update payment record
+   
     await Payment.findOneAndUpdate(
       { task: taskId, paymentType: 'advance' },
       { 

@@ -4,8 +4,7 @@ import Task from "../models/Task.js";
 
 export const getDashboardStats = async (req, res) => {
     try {
-        // Get live jobs (jobs that are not completed or cancelled)
-        const liveJobs = await JobRequest.countDocuments({
+       const liveJobs = await JobRequest.countDocuments({
             status: { $nin: ['completed', 'cancelled'] }
         });
 
@@ -106,17 +105,14 @@ export const getTaskerStats = async (req, res) => {
         // Import Task model
         const Task = (await import('../models/Task.js')).default;
 
-        // Get current month's start date
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-        // Get completed tasks for the tasker (using Task model, not JobRequest)
         const completedTasks = await Task.countDocuments({
             selectedTasker: taskerId,
             status: 'completed'
         });
 
-        // Get this month's earnings from completed tasks (20% of agreed payment)
         const thisMonthTasks = await Task.find({
             selectedTasker: taskerId,
             status: 'completed',
@@ -129,8 +125,6 @@ export const getTaskerStats = async (req, res) => {
             return sum + advanceAmount;
         }, 0);
 
-        // Get total earnings from completed tasks (20% of agreed payment)
-        // Count all completed tasks regardless of advance payment status
         const allCompletedTasks = await Task.find({
             selectedTasker: taskerId,
             status: 'completed'

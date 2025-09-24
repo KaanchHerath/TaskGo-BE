@@ -64,7 +64,7 @@ applicationSchema.index({ task: 1, status: 1 });
 applicationSchema.index({ tasker: 1, status: 1 });
 applicationSchema.index({ createdAt: -1 });
 
-// Validation to ensure tasker doesn't apply to their own task
+
 applicationSchema.pre('save', async function(next) {
   if (this.isNew) {
     const task = await mongoose.model('Task').findById(this.task);
@@ -72,7 +72,7 @@ applicationSchema.pre('save', async function(next) {
       return next(new Error('Cannot apply to your own task'));
     }
     
-    // Validate proposed payment is within task range
+ 
     if (task && (this.proposedPayment < task.minPayment || this.proposedPayment > task.maxPayment)) {
       return next(new Error(`Proposed payment must be between $${task.minPayment} and $${task.maxPayment}`));
     }

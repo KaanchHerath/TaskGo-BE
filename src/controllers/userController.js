@@ -157,7 +157,6 @@ export const loginUser = async (req, res) => {
     } catch (error) {
         console.error('Login error:', error);
         
-        // Provide more specific error messages based on error type
         if (error.name === 'ValidationError') {
             return res.status(400).json({ 
                 message: "Please check your input and try again",

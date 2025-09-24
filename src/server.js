@@ -49,7 +49,6 @@ const io = new Server(server, {
   }
 });
 
-// Socket.IO authentication middleware
 io.use(socketAuth);
 
 io.on('connection', (socket) => {
@@ -112,7 +111,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/tasks", taskRoutes);
 
-// Jobs routes - GET is public, other operations are protected
+// Jobs routes 
 app.use("/api/jobs", jobsRouteProtection, jobRequestRoutes);
 
 app.use('/api/users', userRoutes);

@@ -36,11 +36,10 @@ const taskSchema = new mongoose.Schema({
     min: [1, 'Maximum payment must be at least LKR1'],
     validate: {
       validator: function(value) {
-        // Check if minPayment exists and is a valid number
         if (this.minPayment && typeof this.minPayment === 'number' && typeof value === 'number') {
           return value >= this.minPayment;
         }
-        return true; // Allow validation to pass if minPayment is not set yet
+        return true; 
       },
       message: 'Maximum payment must be greater than or equal to minimum payment'
     }
@@ -50,10 +49,7 @@ const taskSchema = new mongoose.Schema({
     min: [1, 'Agreed payment must be at least LKR1'],
     validate: {
       validator: function(value) {
-        // Allow agreed payment to be set during tasker selection
-        // The original min/max payment range is just for initial task posting
-        // The agreed payment can be negotiated between customer and tasker
-        if (value && value < 1) {
+      if (value && value < 1) {
           return false;
         }
         return true;
@@ -93,7 +89,7 @@ const taskSchema = new mongoose.Schema({
     required: [true, 'Start date is required'],
     validate: {
       validator: function(value) {
-        if (!value) return true; // Let required validation handle this
+        if (!value) return true; 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         return value >= today;
@@ -270,14 +266,14 @@ taskSchema.virtual('applications', {
   foreignField: 'task'
 });
 
-// Virtual for posted date (alias for createdAt)
+
 taskSchema.virtual('postedDate').get(function() {
   return this.createdAt;
 });
 
 // Pre-save middleware
 taskSchema.pre('save', function(next) {
-  // Validate payment range when both min and max payment are set
+
   if (this.minPayment && this.maxPayment && this.minPayment >= this.maxPayment) {
     return next(new Error('Maximum payment must be greater than minimum payment'));
   }

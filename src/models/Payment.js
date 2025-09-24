@@ -98,7 +98,7 @@ const paymentSchema = new mongoose.Schema({
   // Platform commission fields
   platformCommissionRate: {
     type: Number,
-    default: 0.10, // 10% commission rate
+    default: 0.10, 
     min: [0, 'Commission rate cannot be negative'],
     max: [1, 'Commission rate cannot exceed 100%']
   },
@@ -144,7 +144,7 @@ paymentSchema.methods.calculatePlatformCommission = function() {
     this.platformCommissionAmount = Math.round(this.amount * this.platformCommissionRate);
     this.taskerEarnings = this.amount - this.platformCommissionAmount;
   } else {
-    // For final payments, no platform commission
+   
     this.platformCommissionAmount = 0;
     this.taskerEarnings = this.amount;
   }

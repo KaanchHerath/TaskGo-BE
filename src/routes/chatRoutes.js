@@ -9,7 +9,7 @@ import { verifyToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// All chat routes require authentication
+
 router.use(verifyToken);
 
 // @route   POST /api/chat

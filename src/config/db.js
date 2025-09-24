@@ -5,19 +5,19 @@ const connectDB = async () => {
     try {
         const options = {
             // Connection pooling options
-            maxPoolSize: 10, // Maximum number of connections in the pool
-            minPoolSize: 2,  // Minimum number of connections in the pool
+            maxPoolSize: 10, 
+            minPoolSize: 2,  
             // Timeout options
-            serverSelectionTimeoutMS: 30000, // Timeout for server selection
-            socketTimeoutMS: 45000, // Timeout for socket operations
-            connectTimeoutMS: 30000, // Timeout for initial connection
+            serverSelectionTimeoutMS: 30000, 
+            socketTimeoutMS: 45000, 
+            connectTimeoutMS: 30000, 
             // Retry options
             retryWrites: true,
             retryReads: true,
             // Heartbeat options
             heartbeatFrequencyMS: 10000,
-            // Buffer options (updated for newer MongoDB versions)
-            bufferCommands: false, // Disable mongoose buffering
+            // Buffer options 
+            bufferCommands: false, 
         };
 
         await mongoose.connect(process.env.MONGO_URI, options);

@@ -1,7 +1,4 @@
-/**
- * Simple logger utility for the application
- * Provides consistent logging interface across all modules
- */
+
 
 const logger = {
   info: (message, data = {}) => {
@@ -22,4 +19,5 @@ const logger = {
 };
 
 export default logger;
+
 

@@ -91,14 +91,9 @@ export const getTasks = async (req, res) => {
       sortOrder = 'desc'
     } = req.query;
 
-    // Build query - only show active tasks to public
-    // Scheduled tasks are hidden from all users except customer and selectedTasker
-    // Targeted tasks are only visible to the targeted tasker
     const query = { status: 'active', startDate: { $gt: new Date() } };
     
-    // If user is authenticated, check for targeted tasks
     if (req.user && req.user.role === 'tasker') {
-      // For taskers, show non-targeted tasks OR tasks targeted to them
       query.$or = [
         { isTargeted: false },
         { isTargeted: true, targetedTasker: req.user._id }

@@ -28,14 +28,12 @@ router.get('/', getTasks);
 router.get('/category-stats', getCategoryStats);
 router.get('/customer/:customerId', getTasksByCustomerId);
 
-// Protected routes - specific user routes first to avoid conflicts
+// Protected routes
 router.get('/my-tasks', verifyToken, getMyTasks);
 router.get('/my-applications', verifyToken, getMyApplications);
 
-// Single task route - uses optional auth for both public active tasks and private scheduled tasks
 router.get('/:id', optionalAuth, getTask);
 
-// All other routes require authentication
 router.use(verifyToken);
 
 // Task management

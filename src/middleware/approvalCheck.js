@@ -2,10 +2,6 @@ import User from '../models/User.js';
 import logger from '../utils/logger.js';
 
 
-/**
- * Middleware to check if a tasker is approved
- * This middleware should be used after authentication middleware
- */
 export const checkTaskerApproval = async (req, res, next) => {
   try {
     // Check if user exists and is a tasker

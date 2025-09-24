@@ -8,7 +8,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const router = express.Router();
-// Cookie utilities (avoid extra deps)
+
 const parseCookies = (cookieHeader = '') => {
   return cookieHeader.split(';').reduce((acc, part) => {
     const [key, ...v] = part.trim().split('=');
@@ -37,7 +37,7 @@ const issueRefreshToken = (user) => {
 };
 
 const setRefreshCookie = (res, token) => {
-  // Use Secure + SameSite=None for cross-site cookies; path limited to refresh/logout
+  
   res.cookie('refreshToken', token, {
     httpOnly: true,
     secure: true,
