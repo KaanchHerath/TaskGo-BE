@@ -1,5 +1,4 @@
 import JobRequest from "../models/JobRequest.js";
-
 // Create a new job request
 export const createJobRequest = async (req, res) => {
   try {
@@ -11,7 +10,6 @@ export const createJobRequest = async (req, res) => {
   }
 };
 
-// Get all job requests
 export const getAllJobRequests = async (req, res) => {
   try {
     const jobs = await JobRequest.find();
@@ -21,7 +19,6 @@ export const getAllJobRequests = async (req, res) => {
   }
 };
 
-// Get a single job request by ID
 export const getJobRequestById = async (req, res) => {
   try {
     const job = await JobRequest.findById(req.params.id);
@@ -32,7 +29,6 @@ export const getJobRequestById = async (req, res) => {
   }
 };
 
-// Update a job request
 export const updateJobRequest = async (req, res) => {
   try {
     const updatedJob = await JobRequest.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -42,7 +38,6 @@ export const updateJobRequest = async (req, res) => {
     res.status(500).json({ message: "Error updating job request", error });
   }
 };
-
 // Delete a job request
 export const deleteJobRequest = async (req, res) => {
   try {

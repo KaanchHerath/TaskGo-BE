@@ -4,7 +4,6 @@ import { validateAuth } from "../middleware/validation.js";
 
 const router = express.Router();
 
-// Authentication routes
 router.post("/register", validateAuth.register, register);
 router.post("/login", validateAuth.login, login);
 router.post("/register-tasker", validateAuth.taskerRegistration, registerTasker);

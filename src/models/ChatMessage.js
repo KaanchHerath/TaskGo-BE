@@ -40,18 +40,16 @@ const chatMessageSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes for performance
+
 chatMessageSchema.index({ taskId: 1, createdAt: -1 });
 chatMessageSchema.index({ senderId: 1, receiverId: 1 });
 chatMessageSchema.index({ taskId: 1, senderId: 1, receiverId: 1 });
 chatMessageSchema.index({ receiverId: 1, isRead: 1 });
 
-// Virtual for formatted creation date
 chatMessageSchema.virtual('formattedDate').get(function() {
   return this.createdAt.toLocaleString();
 });
 
-// Pre-save middleware to validate sender and receiver are different
 chatMessageSchema.pre('save', function(next) {
   if (this.senderId.toString() === this.receiverId.toString()) {
     return next(new Error('Sender and receiver cannot be the same user'));
@@ -101,7 +99,7 @@ chatMessageSchema.statics.getUnreadCount = function(userId) {
   });
 };
 
-// Instance methods
+
 chatMessageSchema.methods.markAsRead = function() {
   this.isRead = true;
   return this.save();

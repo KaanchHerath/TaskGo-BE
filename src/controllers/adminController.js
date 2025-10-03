@@ -3,12 +3,10 @@ import AdminActionLog from "../models/AdminActionLog.js";
 import Task from "../models/Task.js";
 import Payment from "../models/Payment.js";
 import Application from "../models/Application.js";
-import logger from "../utils/logger.js";
 
 
 
 export const testAdminEndpoint = async (req, res) => {
-    console.log('Test admin endpoint called');
     res.json({
         success: true,
         message: 'Admin controller is working',
@@ -16,19 +14,13 @@ export const testAdminEndpoint = async (req, res) => {
     });
 };
 
-/**
- * Test database connectivity and basic operations
- * @route GET /api/admin/test-db
- * @access Admin only
- */
+
 export const testDatabaseConnection = async (req, res) => {
     try {
-        // Test basic database operations
         const taskCount = await Task.countDocuments();
         const userCount = await User.countDocuments();
         const applicationCount = await Application.countDocuments();
         
-        // Test a simple query
         const sampleTask = await Task.findOne().select('_id title status');
         
         res.json({
@@ -43,10 +35,6 @@ export const testDatabaseConnection = async (req, res) => {
             }
         });
     } catch (error) {
-        logger.error('Database connection test failed', {
-            error: error.message,
-            stack: error.stack
-        });
         
         res.status(500).json({
             success: false,
@@ -56,9 +44,6 @@ export const testDatabaseConnection = async (req, res) => {
     }
 };
 
-/**
- * Get all users 
- */
 export const getAllUsers = async (req, res) => {
     try {
         const users = await User.find().select("-password");
@@ -68,9 +53,6 @@ export const getAllUsers = async (req, res) => {
     }
 };
 
-/**
- * Delete user 
- */
 export const deleteUser = async (req, res) => {
     try {
         const { userId, id } = req.params;
@@ -90,11 +72,6 @@ export const deleteUser = async (req, res) => {
     }
 };
 
-/**
- * Get pending taskers for approval
- * @route GET /api/admin/taskers/pending
- * @access Admin only
- */
 export const getPendingTaskers = async (req, res) => {
     try {
         const { page = 1, limit = 20, status, search = '', province = '', district = '', experience = '', skills = '', sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
@@ -102,19 +79,16 @@ export const getPendingTaskers = async (req, res) => {
         const numericLimit = parseInt(limit);
         const skip = (numericPage - 1) * numericLimit;
 
-        // Base query: only taskers not yet approved
+
         const query = { role: 'tasker', 'taskerProfile.isApproved': false };
 
-        // Status filter
         if (status === 'pending' || !status) {
             query['taskerProfile.approvalStatus'] = 'pending';
         } else if (status === 'rejected') {
             query['taskerProfile.approvalStatus'] = 'rejected';
         } else if (status === 'all') {
-            // no-op
         }
 
-        // Search filter
         if (search && String(search).trim()) {
             const term = String(search).trim();
             query.$or = [
@@ -124,25 +98,22 @@ export const getPendingTaskers = async (req, res) => {
             ];
         }
 
-        // Location filters
         if (province) query['taskerProfile.province'] = province;
         if (district) query['taskerProfile.district'] = district;
 
-        // Experience
         if (experience) query['taskerProfile.experience'] = experience;
 
-        // Skills contains
         if (skills && String(skills).trim()) {
             query['taskerProfile.skills'] = { $elemMatch: { $regex: String(skills).trim(), $options: 'i' } };
         }
 
-        // Sorting
+
         const validSortFields = new Set(['createdAt', 'fullName', 'taskerProfile.province', 'taskerProfile.experience']);
         const sortField = validSortFields.has(sortBy) ? sortBy : 'createdAt';
         const sortDir = String(sortOrder).toLowerCase() === 'asc' ? 1 : -1;
         const sortOptions = { [sortField]: sortDir };
 
-        // Query with pagination
+
         const taskers = await User.find(query)
             .select('fullName email phone taskerProfile createdAt')
             .sort(sortOptions)
@@ -154,7 +125,7 @@ export const getPendingTaskers = async (req, res) => {
         const hasNextPage = numericPage < totalPages;
         const hasPrevPage = numericPage > 1;
 
-        // Log admin action
+
         await AdminActionLog.create({
             adminId: req.user._id,
             actionType: 'ANALYTICS_VIEWED',
@@ -189,11 +160,6 @@ export const getPendingTaskers = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in getPendingTaskers', {
-            error: error.message,
-            adminId: req.user?._id,
-            query: req.query
-        });
 
         res.status(500).json({
             success: false,
@@ -203,11 +169,6 @@ export const getPendingTaskers = async (req, res) => {
     }
 };
 
-/**
- * Approve a tasker
- * @route POST /api/admin/taskers/:taskerId/approve
- * @access Admin only
- */
 export const approveTasker = async (req, res) => {
     try {
         const { taskerId } = req.params;
@@ -238,7 +199,7 @@ export const approveTasker = async (req, res) => {
             { new: true, runValidators: false }
         ).select('fullName email taskerProfile');
 
-        // Create audit log (do not fail approval if logging fails)
+
         try {
             await AdminActionLog.create({
                 adminId: req.user._id,
@@ -255,22 +216,11 @@ export const approveTasker = async (req, res) => {
                 }
             });
         } catch (logError) {
-            logger.warn('AdminActionLog failed during approveTasker', {
-                error: logError.message,
-                adminId: req.user?._id,
-                taskerId
-            });
         }
 
-        // Send notification to tasker (placeholder for email/SMS service)
+
         await sendTaskerApprovalNotification(tasker, 'approved', notes);
 
-        logger.info('Tasker approved successfully', {
-            adminId: req.user._id,
-            taskerId,
-            wasRejected,
-            notes
-        });
 
         return res.json({
             success: true,
@@ -286,11 +236,6 @@ export const approveTasker = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in approveTasker', {
-            error: error.message,
-            adminId: req.user?._id,
-            taskerId: req.params.taskerId
-        });
 
         res.status(500).json({
             success: false,
@@ -300,11 +245,6 @@ export const approveTasker = async (req, res) => {
     }
 };
 
-/**
- * Reject a tasker
- * @route POST /api/admin/taskers/:taskerId/reject
- * @access Admin only
- */
 export const rejectTasker = async (req, res) => {
     try {
         const { taskerId } = req.params;
@@ -334,7 +274,6 @@ export const rejectTasker = async (req, res) => {
             { new: true, runValidators: false }
         ).select('fullName email taskerProfile');
 
-        // Create audit log (do not fail rejection if logging fails)
         try {
             await AdminActionLog.create({
                 adminId: req.user._id,
@@ -351,22 +290,10 @@ export const rejectTasker = async (req, res) => {
                 }
             });
         } catch (logError) {
-            logger.warn('AdminActionLog failed during rejectTasker', {
-                error: logError.message,
-                adminId: req.user?._id,
-                taskerId
-            });
         }
 
-        // Send notification to tasker (placeholder for email/SMS service)
         await sendTaskerApprovalNotification(tasker, 'rejected', reason);
 
-        logger.info('Tasker rejected successfully', {
-            adminId: req.user._id,
-            taskerId,
-            reason,
-            notes
-        });
 
         return res.json({
             success: true,
@@ -383,11 +310,6 @@ export const rejectTasker = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in rejectTasker', {
-            error: error.message,
-            adminId: req.user?._id,
-            taskerId: req.params.taskerId
-        });
 
         res.status(500).json({
             success: false,
@@ -397,11 +319,6 @@ export const rejectTasker = async (req, res) => {
     }
 };
 
-/**
- * Get tasker approval details
- * @route GET /api/admin/taskers/:taskerId/approval
- * @access Admin only
- */
 export const getTaskerApprovalDetails = async (req, res) => {
     try {
         const { taskerId } = req.params;
@@ -413,7 +330,6 @@ export const getTaskerApprovalDetails = async (req, res) => {
             });
         }
 
-        // Find the tasker
         const tasker = await User.findById(taskerId)
             .select('fullName email phone taskerProfile createdAt');
 
@@ -424,7 +340,6 @@ export const getTaskerApprovalDetails = async (req, res) => {
             });
         }
 
-        // Get audit trail for this tasker
         const auditTrail = await AdminActionLog.getAuditTrail(taskerId, 'User');
 
         res.json({
@@ -437,11 +352,6 @@ export const getTaskerApprovalDetails = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in getTaskerApprovalDetails', {
-            error: error.message,
-            adminId: req.user?._id,
-            taskerId: req.params.taskerId
-        });
 
         res.status(500).json({
             success: false,
@@ -451,14 +361,8 @@ export const getTaskerApprovalDetails = async (req, res) => {
     }
 };
 
-/**
- * Get approval statistics
- * @route GET /api/admin/taskers/approval-stats
- * @access Admin only
- */
 export const getApprovalStats = async (req, res) => {
     try {
-        // Get counts for different approval statuses
         const stats = await User.aggregate([
             { $match: { role: 'tasker' } },
             {
@@ -469,7 +373,6 @@ export const getApprovalStats = async (req, res) => {
             }
         ]);
 
-        // Get recent approval activities
         const recentActivities = await AdminActionLog.find({
             actionType: { $in: ['USER_APPROVED', 'USER_REJECTED', 'USER_REACTIVATED'] }
         })
@@ -478,7 +381,6 @@ export const getApprovalStats = async (req, res) => {
         .populate('adminId', 'fullName email')
         .populate('targetId', 'fullName email');
 
-        // Format stats
         const formattedStats = {
             pending: 0,
             approved: 0,
@@ -502,10 +404,6 @@ export const getApprovalStats = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in getApprovalStats', {
-            error: error.message,
-            adminId: req.user?._id
-        });
 
         res.status(500).json({
             success: false,
@@ -528,25 +426,14 @@ const sendTaskerApprovalNotification = async (tasker, status, reason = null) => 
             timestamp: new Date()
         };
 
-        logger.info('Tasker approval notification sent', notificationData);
 
 
 
     } catch (error) {
-        logger.error('Failed to send tasker approval notification', {
-            error: error.message,
-            taskerId: tasker._id,
-            status
-        });
 
     }
 };
 
-/**
- * Get comprehensive dashboard statistics
- * @route GET /api/admin/dashboard/stats
- * @access Admin only
- */
 export const getDashboardStats = async (req, res) => {
     try {
         const now = new Date();
@@ -557,7 +444,6 @@ export const getDashboardStats = async (req, res) => {
         let userStats = {}, taskStats = {}, revenueStats = {}, appStats = {}, growthStats = {};
         let errorSections = [];
 
-        // User Statistics
         try {
             [
                 userStats.totalUsers,
@@ -581,11 +467,9 @@ export const getDashboardStats = async (req, res) => {
                 User.countDocuments({ createdAt: { $gte: today } })
             ]);
         } catch (err) {
-            logger.error('Error fetching user stats', { error: err.message, stack: err.stack });
             errorSections.push('userStats');
         }
 
-        // Task Statistics
         try {
             [
                 taskStats.totalTasks,
@@ -612,11 +496,9 @@ export const getDashboardStats = async (req, res) => {
                 ])
             ]);
         } catch (err) {
-            logger.error('Error fetching task stats', { error: err.message, stack: err.stack });
             errorSections.push('taskStats');
         }
 
-        // Revenue Statistics
         try {
             [
                 revenueStats.totalRevenue,
@@ -655,7 +537,6 @@ export const getDashboardStats = async (req, res) => {
                     { $match: { status: 'completed' } },
                     { $group: { _id: null, avgValue: { $avg: '$agreedPayment' } } }
                 ]),
-                // Platform revenue statistics
                 Payment.aggregate([
                     { $match: { status: 'completed', paymentType: 'advance' } },
                     { $group: { _id: null, total: { $sum: '$platformCommissionAmount' } } }
@@ -674,11 +555,9 @@ export const getDashboardStats = async (req, res) => {
                 ])
             ]);
         } catch (err) {
-            logger.error('Error fetching revenue stats', { error: err.message, stack: err.stack });
             errorSections.push('revenueStats');
         }
 
-        // Application Statistics
         try {
             [
                 appStats.totalApplications,
@@ -694,11 +573,9 @@ export const getDashboardStats = async (req, res) => {
                 Application.countDocuments({ status: 'confirmed' })
             ]);
         } catch (err) {
-            logger.error('Error fetching application stats', { error: err.message, stack: err.stack });
             errorSections.push('appStats');
         }
 
-        // Growth rates
         try {
             const previousMonth = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
             const previousWeek = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
@@ -724,11 +601,9 @@ export const getDashboardStats = async (req, res) => {
                 ])
             ]);
         } catch (err) {
-            logger.error('Error fetching growth stats', { error: err.message, stack: err.stack });
             errorSections.push('growthStats');
         }
 
-        // Calculate percentage changes safely
         const calculateGrowthRate = (current, previous) => {
             if (!previous || previous === 0) return current > 0 ? 100 : 0;
             return ((current - previous) / previous) * 100;
@@ -741,7 +616,6 @@ export const getDashboardStats = async (req, res) => {
             (growthStats.previousMonthRevenue && growthStats.previousMonthRevenue[0]?.total) || 0
         );
 
-        // Compile statistics (with null checks)
         const stats = {
             users: {
                 total: userStats.totalUsers || 0,
@@ -777,7 +651,6 @@ export const getDashboardStats = async (req, res) => {
                 failedPayments: revenueStats.failedPayments || 0,
                 averageTaskValue: (revenueStats.averageTaskValue && revenueStats.averageTaskValue[0]?.avgValue) || 0,
                 growthRate: revenueGrowthRate,
-                // Platform revenue (10% commission from advance payments)
                 platformRevenue: {
                     total: (revenueStats.platformRevenue && revenueStats.platformRevenue[0]?.total) || 0,
                     thisMonth: (revenueStats.platformRevenueThisMonth && revenueStats.platformRevenueThisMonth[0]?.total) || 0,
@@ -801,7 +674,6 @@ export const getDashboardStats = async (req, res) => {
             }
         };
 
-        // Log admin action
         await AdminActionLog.create({
             adminId: req.user._id,
             actionType: 'ANALYTICS_VIEWED',
@@ -816,11 +688,6 @@ export const getDashboardStats = async (req, res) => {
             }
         });
 
-        logger.info('Dashboard statistics generated successfully', {
-            adminId: req.user._id,
-            dataPoints: Object.keys(stats).length,
-            errorSections
-        });
 
         res.json({
             success: true,
@@ -830,11 +697,6 @@ export const getDashboardStats = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in getDashboardStats', {
-            error: error.message,
-            adminId: req.user?._id,
-            stack: error.stack
-        });
 
         res.status(500).json({
             success: false,
@@ -844,11 +706,6 @@ export const getDashboardStats = async (req, res) => {
     }
 };
 
-/**
- * Get recent activity for dashboard feed
- * @route GET /api/admin/dashboard/recent-activity
- * @access Admin only
- */
 export const getRecentActivity = async (req, res) => {
     try {
         const { limit = 20, type = 'all' } = req.query;
@@ -856,7 +713,6 @@ export const getRecentActivity = async (req, res) => {
         const activities = [];
         let errorSections = [];
 
-        // User Registrations
         try {
             if (type === 'all' || type === 'users') {
                 const recentUsers = await User.find()
@@ -881,11 +737,9 @@ export const getRecentActivity = async (req, res) => {
                 });
             }
         } catch (err) {
-            logger.error('Error fetching recent users for activity', { error: err.message, stack: err.stack });
             errorSections.push('users');
         }
 
-        // Task Creations
         try {
             if (type === 'all' || type === 'tasks') {
                 const recentTasks = await Task.find()
@@ -910,11 +764,9 @@ export const getRecentActivity = async (req, res) => {
                 });
             }
         } catch (err) {
-            logger.error('Error fetching recent tasks for activity', { error: err.message, stack: err.stack });
             errorSections.push('tasks');
         }
 
-        // Payments
         try {
             if (type === 'all' || type === 'payments') {
                 const recentPayments = await Payment.find()
@@ -943,11 +795,9 @@ export const getRecentActivity = async (req, res) => {
                 });
             }
         } catch (err) {
-            logger.error('Error fetching recent payments for activity', { error: err.message, stack: err.stack });
             errorSections.push('payments');
         }
 
-        // Admin Actions
         try {
             if (type === 'all' || type === 'admin') {
                 const recentAdminActions = await AdminActionLog.find()
@@ -972,11 +822,9 @@ export const getRecentActivity = async (req, res) => {
                 });
             }
         } catch (err) {
-            logger.error('Error fetching recent admin actions for activity', { error: err.message, stack: err.stack });
             errorSections.push('admin');
         }
 
-        // Task Completions
         try {
             if (type === 'all' || type === 'completions') {
                 const recentCompletions = await Task.find({ status: 'completed' })
@@ -1003,14 +851,11 @@ export const getRecentActivity = async (req, res) => {
                 });
             }
         } catch (err) {
-            logger.error('Error fetching recent completions for activity', { error: err.message, stack: err.stack });
             errorSections.push('completions');
         }
 
-        // Sort all activities by timestamp (most recent first)
         activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-        // Limit results
         const limitedActivities = activities.slice(0, parseInt(limit));
 
         await AdminActionLog.create({
@@ -1029,13 +874,6 @@ export const getRecentActivity = async (req, res) => {
             }
         });
 
-        logger.info('Recent activity retrieved successfully', {
-            adminId: req.user._id,
-            type,
-            limit: parseInt(limit),
-            resultsCount: limitedActivities.length,
-            errorSections
-        });
 
         res.json({
             success: true,
@@ -1047,12 +885,6 @@ export const getRecentActivity = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in getRecentActivity', {
-            error: error.message,
-            adminId: req.user?._id,
-            query: req.query,
-            stack: error.stack
-        });
 
         res.status(500).json({
             success: false,
@@ -1064,11 +896,6 @@ export const getRecentActivity = async (req, res) => {
 
 
 
-/**
- * Get all tasks with admin filtering and management
- * @route GET /api/admin/tasks
- * @access Admin only
- */
 export const getAllTasks = async (req, res) => {
     try {
         const {
@@ -1084,7 +911,6 @@ export const getAllTasks = async (req, res) => {
             sortOrder = 'desc'
         } = req.query;
 
-        // Build query
         const query = {};
 
         if (status) query.status = status;
@@ -1097,10 +923,8 @@ export const getAllTasks = async (req, res) => {
             if (dateTo) query.createdAt.$lte = new Date(dateTo);
         }
 
-        // Pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
-        // Sort options
         const sortOptions = {};
         const validSortFields = ['createdAt', 'startDate', 'maxPayment', 'status'];
         const validSortOrders = ['asc', 'desc'];
@@ -1108,18 +932,10 @@ export const getAllTasks = async (req, res) => {
         if (validSortFields.includes(sortBy) && validSortOrders.includes(sortOrder)) {
             sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
         } else {
-            sortOptions.createdAt = -1; // Default sort
+            sortOptions.createdAt = -1;
         }
 
-        logger.info('Executing simplified getAllTasks query', {
-            query,
-            sortOptions,
-            skip,
-            limit: parseInt(limit),
-            adminId: req.user?._id
-        });
 
-        // Execute query with minimal, safe population of related user fields
         let tasks;
         try {
             tasks = await Task.find(query)
@@ -1132,35 +948,20 @@ export const getAllTasks = async (req, res) => {
                 .limit(parseInt(limit))
                 .lean();
         } catch (queryError) {
-            logger.error('Error during basic Task query', {
-                error: queryError.message,
-                stack: queryError.stack,
-                query,
-                adminId: req.user?._id
-            });
             throw new Error(`Database query error: ${queryError.message}`);
         }
 
-        // Get total count for pagination
         let total;
         try {
             total = await Task.countDocuments(query);
         } catch (countError) {
-            logger.error('Error counting total tasks', {
-                error: countError.message,
-                stack: countError.stack,
-                query,
-                adminId: req.user?._id
-            });
             total = 0;
         }
 
-        // Calculate pagination info
         const totalPages = Math.ceil(total / parseInt(limit));
         const hasNextPage = parseInt(page) < totalPages;
         const hasPrevPage = parseInt(page) > 1;
 
-        // Load applications for these tasks to compute agreedPayment and include applications summary
         let applicationsByTaskId = new Map();
         try {
             const taskIds = tasks.map(t => t._id);
@@ -1191,14 +992,8 @@ export const getAllTasks = async (req, res) => {
                 }
             }
         } catch (appsError) {
-            logger.warn('Failed to load applications for tasks', {
-                error: appsError.message,
-                stack: appsError.stack,
-                adminId: req.user?._id
-            });
         }
 
-        // Attach computed fields and applications list; set agreedPayment from selected tasker application proposedPayment
         const tasksWithBasicData = tasks.map(task => {
             const taskIdStr = String(task._id);
             const apps = applicationsByTaskId.get(taskIdStr) || [];
@@ -1219,7 +1014,7 @@ export const getAllTasks = async (req, res) => {
             };
         });
 
-        // Log admin action (target is the admin User, not a Task document)
+
         try {
             await AdminActionLog.create({
                 adminId: req.user._id,
@@ -1237,18 +1032,8 @@ export const getAllTasks = async (req, res) => {
                 }
             });
         } catch (logError) {
-            logger.warn('Failed to log admin action', {
-                error: logError.message,
-                adminId: req.user?._id
-            });
-            // Don't fail the request if logging fails
         }
 
-        logger.info('Simplified getAllTasks completed successfully', {
-            totalTasks: total,
-            returnedTasks: tasksWithBasicData.length,
-            adminId: req.user?._id
-        });
 
         res.json({
             success: true,
@@ -1275,12 +1060,6 @@ export const getAllTasks = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in simplified getAllTasks', {
-            error: error.message,
-            stack: error.stack,
-            adminId: req.user?._id,
-            query: req.query
-        });
 
         res.status(500).json({
             success: false,
@@ -1290,11 +1069,6 @@ export const getAllTasks = async (req, res) => {
     }
 };
 
-/**
- * Get task details for admin
- * @route GET /api/admin/tasks/:taskId
- * @access Admin only
- */
 export const getTaskDetails = async (req, res) => {
     try {
         const { taskId } = req.params;
@@ -1306,7 +1080,6 @@ export const getTaskDetails = async (req, res) => {
             });
         }
 
-        // Find task with all related data
         const task = await Task.findById(taskId)
             .populate('customer', 'fullName email phone rating statistics')
             .populate('selectedTasker', 'fullName email phone rating statistics taskerProfile')
@@ -1319,19 +1092,16 @@ export const getTaskDetails = async (req, res) => {
             });
         }
 
-        // Get applications for this task
         const applications = await Application.find({ task: taskId })
             .populate('tasker', 'fullName email phone rating taskerProfile')
             .sort({ createdAt: -1 });
 
-        // Get related data
         const relatedData = {
             applications: applications.length,
             recentApplications: applications.slice(0, 10),
             paymentInfo: null
         };
 
-        // Get payment information if task is completed
         if (task.status === 'completed') {
             const payment = await Payment.findOne({ task: taskId });
             if (payment) {
@@ -1354,11 +1124,6 @@ export const getTaskDetails = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in getTaskDetails', {
-            error: error.message,
-            adminId: req.user?._id,
-            taskId: req.params.taskId
-        });
 
         res.status(500).json({
             success: false,
@@ -1368,11 +1133,6 @@ export const getTaskDetails = async (req, res) => {
     }
 };
 
-/**
- * Update task status (admin override)
- * @route PUT /api/admin/tasks/:taskId/status
- * @access Admin only
- */
 export const updateTaskStatus = async (req, res) => {
     try {
         const { taskId } = req.params;
@@ -1392,7 +1152,6 @@ export const updateTaskStatus = async (req, res) => {
             });
         }
 
-        // Validate status
         const validStatuses = ['active', 'scheduled', 'in_progress', 'completed', 'cancelled'];
         if (!validStatuses.includes(status)) {
             return res.status(400).json({
@@ -1401,7 +1160,6 @@ export const updateTaskStatus = async (req, res) => {
             });
         }
 
-        // Find the task
         const task = await Task.findById(taskId);
         if (!task) {
             return res.status(404).json({
@@ -1412,7 +1170,6 @@ export const updateTaskStatus = async (req, res) => {
 
         const previousStatus = task.status;
 
-        // Update task status
         task.status = status;
         if (reason) {
             task.adminNotes = reason;
@@ -1420,7 +1177,6 @@ export const updateTaskStatus = async (req, res) => {
 
         await task.save();
 
-        // Create audit log
         await AdminActionLog.create({
             adminId: req.user._id,
             actionType: 'TASK_STATUS_UPDATED',
@@ -1448,11 +1204,6 @@ export const updateTaskStatus = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in updateTaskStatus', {
-            error: error.message,
-            adminId: req.user?._id,
-            taskId: req.params.taskId
-        });
 
         res.status(500).json({
             success: false,
@@ -1462,16 +1213,10 @@ export const updateTaskStatus = async (req, res) => {
     }
 };
 
-/**
- * Get task statistics for admin dashboard
- * @route GET /api/admin/tasks/stats
- * @access Admin only
- */
 export const getTaskStats = async (req, res) => {
     try {
         const { period = '30d' } = req.query;
 
-        // Calculate date range
         const now = new Date();
         let startDate;
         switch (period) {
@@ -1488,7 +1233,6 @@ export const getTaskStats = async (req, res) => {
                 startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         }
 
-        // Get task statistics
         const [
             totalTasks,
             activeTasks,
@@ -1521,7 +1265,6 @@ export const getTaskStats = async (req, res) => {
             ])
         ]);
 
-        // Format statistics
         const stats = {
             period,
             overview: {
@@ -1552,10 +1295,6 @@ export const getTaskStats = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in getTaskStats', {
-            error: error.message,
-            adminId: req.user?._id
-        });
 
         res.status(500).json({
             success: false,
@@ -1565,16 +1304,10 @@ export const getTaskStats = async (req, res) => {
     }
 };
 
-/**
- * Get user statistics for admin dashboard
- * @route GET /api/admin/users/stats
- * @access Admin only
- */
 export const getUserStats = async (req, res) => {
     try {
         const { period = '30d' } = req.query;
 
-        // Calculate date range
         const now = new Date();
         let startDate;
         switch (period) {
@@ -1591,7 +1324,6 @@ export const getUserStats = async (req, res) => {
                 startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         }
 
-        // Get user statistics
         const [
             totalUsers,
             newUsers,
@@ -1627,7 +1359,6 @@ export const getUserStats = async (req, res) => {
             ])
         ]);
 
-        // Format statistics
         const stats = {
             period,
             overview: {
@@ -1658,10 +1389,6 @@ export const getUserStats = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in getUserStats', {
-            error: error.message,
-            adminId: req.user?._id
-        });
 
         res.status(500).json({
             success: false,
@@ -1671,16 +1398,10 @@ export const getUserStats = async (req, res) => {
     }
 };
 
-/**
- * Get payment statistics for admin dashboard
- * @route GET /api/admin/payments/stats
- * @access Admin only
- */
 export const getPaymentStats = async (req, res) => {
     try {
         const { period = '30d' } = req.query;
 
-        // Calculate date range
         const now = new Date();
         let startDate;
         switch (period) {
@@ -1697,7 +1418,6 @@ export const getPaymentStats = async (req, res) => {
                 startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         }
 
-        // Get payment statistics
         const [
             totalPayments,
             successfulPayments,
@@ -1740,7 +1460,6 @@ export const getPaymentStats = async (req, res) => {
             ])
         ]);
 
-        // Format statistics
         const stats = {
             period,
             overview: {
@@ -1766,7 +1485,6 @@ export const getPaymentStats = async (req, res) => {
                 revenue: item.revenue,
                 count: item.count
             })),
-            // Add platform revenue by month
             platformRevenueByMonth: await Payment.aggregate([
                 { $match: { status: 'completed', paymentType: 'advance', createdAt: { $gte: startDate } } },
                 {
@@ -1785,7 +1503,6 @@ export const getPaymentStats = async (req, res) => {
                 platformRevenue: item.platformRevenue,
                 count: item.count
             }))),
-            // Add platform revenue values for chart
             platformRevenueValues: await Payment.aggregate([
                 { $match: { status: 'completed', paymentType: 'advance', createdAt: { $gte: startDate } } },
                 {
@@ -1811,10 +1528,6 @@ export const getPaymentStats = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error in getPaymentStats', {
-            error: error.message,
-            adminId: req.user?._id
-        });
 
         res.status(500).json({
             success: false,

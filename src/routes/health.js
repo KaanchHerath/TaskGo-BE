@@ -4,9 +4,6 @@ import { verifyToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// @route   GET /api/health
-// @desc    Health check endpoint
-// @access  Public
 router.get('/', (req, res) => {
   res.status(200).json({
     success: true,
@@ -16,14 +13,10 @@ router.get('/', (req, res) => {
   });
 });
 
-// @route   GET /api/health/websocket
-// @desc    Test WebSocket connection
-// @access  Public
 router.get('/websocket', (req, res) => {
   const io = req.app.get('io');
   
   if (io) {
-    // Test emit to all connected clients
     io.emit('test-message', {
       message: 'WebSocket test message',
       timestamp: new Date().toISOString()
@@ -43,9 +36,6 @@ router.get('/websocket', (req, res) => {
   }
 });
 
-// @route   POST /api/health/websocket-test
-// @desc    Test WebSocket with specific user
-// @access  Private
 router.post('/websocket-test', verifyToken, (req, res) => {
   const { userId, message } = req.body;
   const io = req.app.get('io');
@@ -74,7 +64,6 @@ router.post('/websocket-test', verifyToken, (req, res) => {
   }
 });
 
-// Health check endpoint
 router.get('/health', (req, res) => {
   const health = {
     status: 'OK',

@@ -3,10 +3,8 @@ import Task from "../models/Task.js";
 import Application from "../models/Application.js";
 import mongoose from 'mongoose';
 
-// Helper function to calculate response rate based on actual data
 const calculateResponseRate = async (taskerId) => {
     try {
-        // Get total tasks the tasker has been involved with
         const totalTasks = await Task.countDocuments({
             $or: [
                 { selectedTasker: taskerId },
@@ -14,7 +12,6 @@ const calculateResponseRate = async (taskerId) => {
             ]
         });
 
-        // Get completed tasks
         const completedTasks = await Task.countDocuments({
             $or: [
                 { selectedTasker: taskerId, status: 'completed' },
@@ -27,7 +24,7 @@ const calculateResponseRate = async (taskerId) => {
         });
 
         if (totalTasks === 0 && totalApplications === 0) {
-            return 0; // New tasker with no activity
+            return 0;
         }
 
         let responseRate = 0;
@@ -38,7 +35,7 @@ const calculateResponseRate = async (taskerId) => {
         }
 
         if (totalApplications > 0) {
-            responseRate = Math.max(responseRate, 85); // Minimum 85% for active taskers
+            responseRate = Math.max(responseRate, 85);
         }
 
         return Math.round(responseRate);
@@ -48,9 +45,6 @@ const calculateResponseRate = async (taskerId) => {
     }
 };
 
-// @desc    Get all taskers with filtering, pagination, and sorting
-// @route   GET /api/taskers
-// @access  Public
 export const getAllTaskers = async (req, res) => {
     try {
         const {
@@ -72,32 +66,26 @@ export const getAllTaskers = async (req, res) => {
             'taskerProfile.isAvailable': true 
         };
         
-        // Filter by skills
         if (skills) {
             const skillsArray = Array.isArray(skills) ? skills : [skills];
             query['taskerProfile.skills'] = { $in: skillsArray };
         }
         
-        // Filter by province
         if (province) {
             query['taskerProfile.province'] = province;
         }
         
-        // Filter by district
         if (district) {
             query['taskerProfile.district'] = district;
         }
         
-        // Filter by minimum rating
         if (minRating) {
             query['rating.average'] = { $gte: Number(minRating) };
         }
         
-        // Build combined OR/AND conditions for search and area
         const searchOrClauses = [];
         const areaOrClauses = [];
 
-        // Search in name or skills
         if (search) {
             searchOrClauses.push(
                 { fullName: { $regex: search, $options: 'i' } },
@@ -113,7 +101,6 @@ export const getAllTaskers = async (req, res) => {
             );
         }
 
-        // Apply boolean logic: if both search and area present => AND, otherwise single OR
         if (searchOrClauses.length && areaOrClauses.length) {
             query.$and = [
                 { $or: searchOrClauses },
@@ -125,37 +112,31 @@ export const getAllTaskers = async (req, res) => {
             query.$or = areaOrClauses;
         }
 
-        // Calculate pagination
         const skip = (page - 1) * limit;
         
-        // Build sort object
         const sort = {};
         sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
-        // Get taskers with pagination
         const taskers = await User.find(query)
             .select("-password")
             .sort(sort)
             .skip(skip)
             .limit(Number(limit));
 
-        // Get total count for pagination
         const total = await User.countDocuments(query);
         const enhancedTaskers = await Promise.all(
             taskers.map(async (tasker) => {
-                // Get completed tasks count
                 const completedTasks = await Task.countDocuments({
                     selectedTasker: tasker._id,
                     status: 'completed'
                 });
 
-                const avgResponseTime = Math.floor(Math.random() * 4) + 1; // 1-4 hours
+                const avgResponseTime = Math.floor(Math.random() * 4) + 1;
 
                 const baseRate = 15 + (tasker.rating?.average || 0) * 5;
                 const experienceBonus = Math.min(completedTasks * 0.5, 15);
                 const hourlyRate = Math.round(baseRate + experienceBonus);
 
-                // Calculate real response rate
                 const responseRate = await calculateResponseRate(tasker._id);
 
                 return {
@@ -163,7 +144,7 @@ export const getAllTaskers = async (req, res) => {
                     completedTasks,
                     avgResponseTime,
                     hourlyRate,
-                    isOnline: Math.random() > 0.3, // Mock online status
+                    isOnline: Math.random() > 0.3,
                     responseRate
                 };
             })
@@ -188,9 +169,6 @@ export const getAllTaskers = async (req, res) => {
     }
 };
 
-// @desc    Get top rated taskers
-// @route   GET /api/taskers/top-rated
-// @access  Public
 export const getTopRatedTaskers = async (req, res) => {
     try {
         const { limit = 6 } = req.query;
@@ -242,9 +220,6 @@ export const getTopRatedTaskers = async (req, res) => {
     }
 };
 
-// @desc    Get tasker by ID with detailed information
-// @route   GET /api/taskers/:id
-// @access  Public
 export const getTaskerById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -266,7 +241,6 @@ export const getTaskerById = async (req, res) => {
             });
         }
 
-        // Get detailed statistics
         const completedTasks = await Task.countDocuments({
             selectedTasker: tasker._id,
             status: 'completed'
@@ -281,13 +255,11 @@ export const getTaskerById = async (req, res) => {
             tasker: tasker._id
         });
 
-        // Calculate additional metrics
         const avgResponseTime = Math.floor(Math.random() * 4) + 1;
         const baseRate = 15 + (tasker.rating?.average || 0) * 5;
         const experienceBonus = Math.min(completedTasks * 0.5, 15);
         const hourlyRate = Math.round(baseRate + experienceBonus);
 
-        // Calculate real response rate
         const responseRate = await calculateResponseRate(tasker._id);
 
         const enhancedTasker = {
@@ -351,9 +323,6 @@ export const updateTaskerAvailability = async (req, res) => {
     }
 };
 
-// @desc    Get tasker profile with detailed information
-// @route   GET /api/taskers/:id/profile
-// @access  Public
 export const getTaskerProfile = async (req, res) => {
     try {
         const { id } = req.params;
@@ -375,7 +344,6 @@ export const getTaskerProfile = async (req, res) => {
             });
         }
 
-        // Get detailed statistics
         const completedTasks = await Task.countDocuments({
             selectedTasker: tasker._id,
             status: 'completed'
@@ -390,7 +358,6 @@ export const getTaskerProfile = async (req, res) => {
             tasker: tasker._id
         });
 
-        // Get recent completed tasks for experience showcase
         const recentTasks = await Task.find({
             selectedTasker: tasker._id,
             status: 'completed'
@@ -400,13 +367,11 @@ export const getTaskerProfile = async (req, res) => {
         .sort({ completedAt: -1 })
         .limit(5);
 
-        // Calculate additional metrics
         const avgResponseTime = Math.floor(Math.random() * 4) + 1;
         const baseRate = 15 + (tasker.rating?.average || 0) * 5;
         const experienceBonus = Math.min(completedTasks * 0.5, 15);
         const hourlyRate = Math.round(baseRate + experienceBonus);
 
-        // Calculate real response rate
         const responseRate = await calculateResponseRate(tasker._id);
 
         const profileData = {
@@ -421,7 +386,6 @@ export const getTaskerProfile = async (req, res) => {
             hourlyRate,
             isOnline: Math.random() > 0.3,
             recentTasks,
-            // Extract tasker profile data
             skills: tasker.taskerProfile?.skills || [],
             experience: tasker.taskerProfile?.experience || '',
             bio: tasker.taskerProfile?.bio || '',
@@ -442,9 +406,6 @@ export const getTaskerProfile = async (req, res) => {
     }
 };
 
-// @desc    Get tasker reviews and feedback from customers
-// @route   GET /api/taskers/:id/reviews
-// @access  Public
 export const getTaskerReviews = async (req, res) => {
     try {
         const { id } = req.params;
@@ -457,7 +418,6 @@ export const getTaskerReviews = async (req, res) => {
             });
         }
 
-        // Verify tasker exists
         const tasker = await User.findOne({ _id: id, role: "tasker" });
         if (!tasker) {
             return res.status(404).json({
@@ -466,10 +426,8 @@ export const getTaskerReviews = async (req, res) => {
             });
         }
 
-        // Calculate pagination
         const skip = (page - 1) * limit;
 
-        // Get completed tasks with customer reviews
         const reviewedTasks = await Task.find({
             selectedTasker: id,
             status: 'completed',
@@ -484,7 +442,6 @@ export const getTaskerReviews = async (req, res) => {
         .skip(skip)
         .limit(Number(limit));
 
-        // Get total count for pagination
         const total = await Task.countDocuments({
             selectedTasker: id,
             status: 'completed',
@@ -494,7 +451,6 @@ export const getTaskerReviews = async (req, res) => {
             ]
         });
 
-        // Format reviews data
         const reviews = reviewedTasks.map(task => ({
             _id: task._id,
             taskTitle: task.title,
@@ -508,7 +464,6 @@ export const getTaskerReviews = async (req, res) => {
             createdAt: task.completedAt || task.customerCompletedAt
         }));
 
-        // Calculate review statistics
         const ratingStats = {
             totalReviews: reviews.length,
             averageRating: reviews.length > 0 
@@ -543,9 +498,6 @@ export const getTaskerReviews = async (req, res) => {
     }
 };
 
-// @desc    Upload qualification documents for tasker
-// @route   POST /api/taskers/qualification-documents
-// @access  Private (Tasker only)
 export const uploadQualificationDocuments = async (req, res) => {
     try {
         const taskerId = req.user.id;
@@ -572,7 +524,6 @@ export const uploadQualificationDocuments = async (req, res) => {
             : [req.files.qualificationDocuments];
 
         for (const file of files) {
-            // Validate file type
             const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
             if (!allowedTypes.includes(file.mimetype)) {
                 return res.status(400).json({
@@ -581,7 +532,6 @@ export const uploadQualificationDocuments = async (req, res) => {
                 });
             }
 
-            // Validate file size (10MB limit)
             if (file.size > 10 * 1024 * 1024) {
                 return res.status(400).json({
                     success: false,
@@ -589,20 +539,17 @@ export const uploadQualificationDocuments = async (req, res) => {
                 });
             }
 
-            // Generate unique filename
             const timestamp = Date.now();
             const randomString = Math.random().toString(36).substring(2, 15);
             const fileExtension = file.name.split('.').pop();
             const filename = `qualification-${timestamp}-${randomString}.${fileExtension}`;
 
-            // Move file to uploads directory
             const uploadPath = `./uploads/tasker-docs/${filename}`;
             await file.mv(uploadPath);
 
             uploadedFiles.push(`uploads/tasker-docs/${filename}`);
         }
 
-        // Update tasker profile with new documents
         const updatedTasker = await User.findByIdAndUpdate(
             taskerId,
             {
@@ -627,9 +574,6 @@ export const uploadQualificationDocuments = async (req, res) => {
     }
 };
 
-// @desc    Remove qualification document for tasker
-// @route   DELETE /api/taskers/qualification-documents/:documentId
-// @access  Private (Tasker only)
 export const removeQualificationDocument = async (req, res) => {
     try {
         const taskerId = req.user.id;
@@ -644,7 +588,6 @@ export const removeQualificationDocument = async (req, res) => {
             });
         }
 
-        // Find the document in the tasker's profile
         const documentIndex = tasker.taskerProfile?.qualificationDocuments?.findIndex(
             doc => doc.includes(documentId) || doc.split('/').pop().split('.')[0] === documentId
         );
@@ -656,7 +599,6 @@ export const removeQualificationDocument = async (req, res) => {
             });
         }
 
-        // Remove the document from the array
         const updatedTasker = await User.findByIdAndUpdate(
             taskerId,
             {

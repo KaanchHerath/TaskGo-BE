@@ -3,14 +3,10 @@ import ChatMessage from '../models/ChatMessage.js';
 import Task from '../models/Task.js';
 import Application from '../models/Application.js';
 
-// @desc    Send a new chat message
-// @route   POST /api/chat
-// @access  Private
 export const sendMessage = async (req, res) => {
   try {
     const { taskId, senderId, receiverId, message } = req.body;
 
-    // Validate required fields
     if (!taskId || !senderId || !receiverId || !message) {
       return res.status(400).json({
         success: false,
@@ -18,7 +14,6 @@ export const sendMessage = async (req, res) => {
       });
     }
 
-    // Validate ObjectId formats
     if (!mongoose.Types.ObjectId.isValid(taskId) || 
         !mongoose.Types.ObjectId.isValid(senderId) || 
         !mongoose.Types.ObjectId.isValid(receiverId)) {
@@ -28,7 +23,6 @@ export const sendMessage = async (req, res) => {
       });
     }
 
-    // Verify the sender is the authenticated user
     if (senderId !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -36,7 +30,6 @@ export const sendMessage = async (req, res) => {
       });
     }
 
-    // Verify the task exists
     const task = await Task.findById(taskId);
     if (!task) {
       return res.status(404).json({
@@ -45,14 +38,11 @@ export const sendMessage = async (req, res) => {
       });
     }
 
-    // Check if the user has permission to chat about this task
     const isCustomer = task.customer.toString() === req.user._id.toString();
     const isSelectedTasker = task.selectedTasker && task.selectedTasker.toString() === req.user._id.toString();
     const isTargetedTasker = task.isTargeted && task.targetedTasker && task.targetedTasker.toString() === req.user._id.toString();
     
-    // Updated access control based on task status
     if (task.status === 'scheduled') {
-      // For scheduled tasks, only customer, selectedTasker, and targetedTasker can chat
       if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         return res.status(403).json({
           success: false,
@@ -60,7 +50,6 @@ export const sendMessage = async (req, res) => {
         });
       }
     } else if (task.status === 'active') {
-      // For active tasks, customer, any applied tasker, and targetedTasker can chat
       let hasApplied = false;
       if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         const application = await Application.findOne({
@@ -77,7 +66,6 @@ export const sendMessage = async (req, res) => {
         });
       }
     } else {
-      // For other statuses, maintain existing logic
       let hasApplied = false;
       if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         const application = await Application.findOne({
@@ -95,14 +83,11 @@ export const sendMessage = async (req, res) => {
       }
     }
 
-    // Verify the receiver is involved in this task
     const receiverIsCustomer = task.customer.toString() === receiverId;
     const receiverIsSelectedTasker = task.selectedTasker && task.selectedTasker.toString() === receiverId;
     const receiverIsTargetedTasker = task.isTargeted && task.targetedTasker && task.targetedTasker.toString() === receiverId;
     
-    // Updated receiver validation based on task status
     if (task.status === 'scheduled') {
-      // For scheduled tasks, only customer, selectedTasker, and targetedTasker can receive messages
       if (!receiverIsCustomer && !receiverIsSelectedTasker && !receiverIsTargetedTasker) {
         return res.status(400).json({
           success: false,
@@ -110,7 +95,6 @@ export const sendMessage = async (req, res) => {
         });
       }
     } else {
-      // For other statuses, check if receiver has applied or is involved
       let receiverHasApplied = false;
       if (!receiverIsCustomer && !receiverIsSelectedTasker && !receiverIsTargetedTasker) {
         const receiverApplication = await Application.findOne({
@@ -128,7 +112,6 @@ export const sendMessage = async (req, res) => {
       }
     }
 
-    // Create the chat message
     const chatMessage = new ChatMessage({
       taskId,
       senderId,
@@ -138,12 +121,10 @@ export const sendMessage = async (req, res) => {
 
     await chatMessage.save();
 
-    // Populate sender and receiver information
     await chatMessage.populate('senderId', 'fullName email');
     await chatMessage.populate('receiverId', 'fullName email');
     await chatMessage.populate('taskId', 'title');
 
-    // Emit WebSocket event for real-time messaging
     try {
       const io = req.app.get('io');
       console.log('🔌 WebSocket emission attempt:', { io: !!io, app: !!req.app });
@@ -156,24 +137,22 @@ export const sendMessage = async (req, res) => {
           receiverId: receiverId
         };
         
-        console.log('📤 Emitting chat-message event:', messageData);
+        console.log('Emitting chat-message event:', messageData);
         
-        // Emit to the receiver's room
         io.to(`user-${receiverId}`).emit('chat-message', messageData);
         
-        // Also emit to the sender's room for confirmation
         io.to(`user-${senderId}`).emit('message-sent', {
           message: chatMessage,
           taskId: taskId
         });
         
-        console.log(`✅ WebSocket chat message sent to user ${receiverId}`);
-        console.log(`✅ WebSocket message-sent confirmation sent to user ${senderId}`);
+        console.log(`WebSocket chat message sent to user ${receiverId}`);
+        console.log(`WebSocket message-sent confirmation sent to user ${senderId}`);
       } else {
-        console.error('❌ WebSocket io instance not available');
+        console.error('WebSocket io instance not available');
       }
     } catch (wsError) {
-      console.error('❌ WebSocket chat notification error:', wsError);
+      console.error('WebSocket chat notification error:', wsError);
     }
 
     res.status(201).json({
@@ -191,15 +170,11 @@ export const sendMessage = async (req, res) => {
   }
 };
 
-// @desc    Get conversation between two users for a specific task
-// @route   GET /api/chat/:taskId/:userId
-// @access  Private
 export const getConversation = async (req, res) => {
   try {
     const { taskId, userId } = req.params;
     const { page = 1, limit = 50 } = req.query;
 
-    // Validate ObjectId formats
     if (!mongoose.Types.ObjectId.isValid(taskId) || !mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({
         success: false,
@@ -207,7 +182,6 @@ export const getConversation = async (req, res) => {
       });
     }
 
-    // Verify the task exists
     const task = await Task.findById(taskId);
     if (!task) {
       return res.status(404).json({
@@ -216,14 +190,11 @@ export const getConversation = async (req, res) => {
       });
     }
 
-    // Check if the authenticated user has permission to view this conversation
     const isCustomer = task.customer.toString() === req.user._id.toString();
     const isSelectedTasker = task.selectedTasker && task.selectedTasker.toString() === req.user._id.toString();
     const isTargetedTasker = task.isTargeted && task.targetedTasker && task.targetedTasker.toString() === req.user._id.toString();
     
-    // Updated access control based on task status
     if (task.status === 'scheduled') {
-      // For scheduled tasks, only customer, selectedTasker, and targetedTasker can access conversations
       if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         return res.status(403).json({
           success: false,
@@ -231,7 +202,6 @@ export const getConversation = async (req, res) => {
         });
       }
     } else if (task.status === 'active') {
-      // For active tasks, customer, any applied tasker, and targetedTasker can access conversations
       let hasApplied = false;
       if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         const application = await Application.findOne({
@@ -248,7 +218,6 @@ export const getConversation = async (req, res) => {
         });
       }
     } else {
-      // For other statuses, maintain existing logic
       let hasApplied = false;
       if (!isCustomer && !isSelectedTasker && !isTargetedTasker) {
         const application = await Application.findOne({
@@ -266,14 +235,11 @@ export const getConversation = async (req, res) => {
       }
     }
 
-    // Verify the other user is involved in this task
     const otherUserIsCustomer = task.customer.toString() === userId;
     const otherUserIsSelectedTasker = task.selectedTasker && task.selectedTasker.toString() === userId;
     const otherUserIsTargetedTasker = task.isTargeted && task.targetedTasker && task.targetedTasker.toString() === userId;
     
-    // Updated other user validation based on task status
     if (task.status === 'scheduled') {
-      // For scheduled tasks, only customer, selectedTasker, and targetedTasker can be conversation participants
       if (!otherUserIsCustomer && !otherUserIsSelectedTasker && !otherUserIsTargetedTasker) {
         return res.status(400).json({
           success: false,
@@ -281,7 +247,6 @@ export const getConversation = async (req, res) => {
         });
       }
     } else {
-      // For other statuses, check if other user has applied or is involved
       let otherUserHasApplied = false;
       if (!otherUserIsCustomer && !otherUserIsSelectedTasker && !otherUserIsTargetedTasker) {
         const otherUserApplication = await Application.findOne({
@@ -299,10 +264,8 @@ export const getConversation = async (req, res) => {
       }
     }
 
-    // Calculate pagination
     const skip = (page - 1) * limit;
 
-    // Get the conversation
     const messages = await ChatMessage.find({
       taskId: taskId,
       $or: [
@@ -316,7 +279,6 @@ export const getConversation = async (req, res) => {
     .skip(skip)
     .limit(Number(limit));
 
-    // Get total count for pagination
     const total = await ChatMessage.countDocuments({
       taskId: taskId,
       $or: [
@@ -325,7 +287,6 @@ export const getConversation = async (req, res) => {
       ]
     });
 
-    // Mark messages as read for the authenticated user
     await ChatMessage.updateMany(
       {
         taskId: taskId,
@@ -361,9 +322,6 @@ export const getConversation = async (req, res) => {
   }
 };
 
-// @desc    Get unread message count for the authenticated user
-// @route   GET /api/chat/unread-count
-// @access  Private
 export const getUnreadCount = async (req, res) => {
   try {
     const unreadCount = await ChatMessage.countDocuments({
@@ -387,14 +345,10 @@ export const getUnreadCount = async (req, res) => {
   }
 };
 
-// @desc    Mark messages as read for a specific task
-// @route   PUT /api/chat/:taskId/mark-read
-// @access  Private
 export const markMessagesAsRead = async (req, res) => {
   try {
     const { taskId } = req.params;
 
-    // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(taskId)) {
       return res.status(400).json({
         success: false,
@@ -402,7 +356,6 @@ export const markMessagesAsRead = async (req, res) => {
       });
     }
 
-    // Mark all unread messages for this task and user as read
     const result = await ChatMessage.updateMany(
       {
         taskId: taskId,

@@ -5,12 +5,8 @@ import mongoose from 'mongoose';
 import fs from 'fs';
 import path from 'path';
 
-// @desc    Create new task
-// @route   POST /api/tasks
-// @access  Private (Customer only)
 export const createTask = async (req, res) => {
   try {
-    // Verify user is customer
     if (req.user.role !== 'customer') {
       return res.status(403).json({
         success: false,
@@ -23,9 +19,7 @@ export const createTask = async (req, res) => {
       customer: req.user._id
     };
 
-    // Handle targeted tasks
     if (req.body.targetedTasker) {
-      // Validate that the targeted tasker exists and is actually a tasker
       const targetedUser = await User.findById(req.body.targetedTasker);
       if (!targetedUser) {
         return res.status(400).json({
@@ -45,10 +39,8 @@ export const createTask = async (req, res) => {
 
     const task = await Task.create(taskData);
     
-    // Increment customer's tasks posted count
     await req.user.incrementTaskStat('tasksPosted');
     
-    // Populate customer details
     await task.populate('customer', 'fullName email');
 
     res.status(201).json({
@@ -75,9 +67,6 @@ export const createTask = async (req, res) => {
   }
 };
 
-// @desc    Get all active tasks
-// @route   GET /api/tasks
-// @access  Public (only shows active tasks - scheduled tasks are hidden from public view)
 export const getTasks = async (req, res) => {
   try {
     const {
@@ -99,7 +88,6 @@ export const getTasks = async (req, res) => {
         { isTargeted: true, targetedTasker: req.user._id }
       ];
     } else {
-      // For non-authenticated users or customers, only show non-targeted tasks
       query.isTargeted = false;
     }
     
@@ -111,18 +99,15 @@ export const getTasks = async (req, res) => {
       if (maxPayment) query.maxPayment.$lte = Number(maxPayment);
     }
 
-    // Calculate pagination
     const skip = (page - 1) * limit;
     const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
 
-    // Execute query
     const tasks = await Task.find(query)
       .populate('customer', 'fullName email rating statistics')
       .sort(sort)
       .skip(skip)
       .limit(Number(limit));
 
-    // Manually populate application count for each task
     const tasksWithApplicationCount = await Promise.all(
       tasks.map(async (task) => {
         const applicationCount = await Application.countDocuments({ task: task._id });
@@ -160,12 +145,8 @@ export const getTasks = async (req, res) => {
   }
 };
 
-// @desc    Get single task
-// @route   GET /api/tasks/:id
-// @access  Public (for active tasks), Private (for scheduled/other statuses)
 export const getTask = async (req, res) => {
   try {
-    // Validate ObjectId format first
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({
         success: false,
@@ -185,10 +166,7 @@ export const getTask = async (req, res) => {
       });
     }
 
-    // Updated access permissions based on task status
     if (task.status === 'active') {
-      // Active tasks are visible to all users (public access)
-      // However, targeted tasks should only be visible to customer and targeted tasker
       if (task.isTargeted) {
         if (!req.user) {
           return res.status(401).json({
@@ -209,7 +187,6 @@ export const getTask = async (req, res) => {
         }
       }
     } else if (task.status === 'scheduled') {
-      // Scheduled tasks are only visible to customer and selectedTasker
       if (!req.user) {
         return res.status(401).json({
           success: false,
@@ -230,7 +207,6 @@ export const getTask = async (req, res) => {
         });
       }
     } else {
-      // For other statuses (completed, cancelled, etc.), only allow task participants
       if (!req.user) {
         return res.status(401).json({
           success: false,
@@ -252,7 +228,6 @@ export const getTask = async (req, res) => {
       }
     }
 
-    // Manually populate application count
     const applicationCount = await Application.countDocuments({ task: task._id });
     let hasApplied = false;
     if (req.user && req.user.role === 'tasker') {
@@ -286,12 +261,8 @@ export const getTask = async (req, res) => {
   }
 };
 
-// @desc    Apply for task
-// @route   POST /api/tasks/:id/apply
-// @access  Private (Tasker only)
 export const applyForTask = async (req, res) => {
   try {
-    // Verify user is tasker
     if (req.user.role !== 'tasker') {
       return res.status(403).json({
         success: false,
@@ -299,7 +270,6 @@ export const applyForTask = async (req, res) => {
       });
     }
 
-    // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({
         success: false,
@@ -316,7 +286,6 @@ export const applyForTask = async (req, res) => {
       });
     }
 
-    // Check if task is accessible to taskers
     if (task.status !== 'active') {
       return res.status(403).json({
         success: false,
@@ -331,7 +300,6 @@ export const applyForTask = async (req, res) => {
       });
     }
 
-    // Check if already applied
     const existingApplication = await Application.findOne({
       task: req.params.id,
       tasker: req.user._id
@@ -356,14 +324,11 @@ export const applyForTask = async (req, res) => {
 
     const application = await Application.create(applicationData);
     
-    // Increment tasker's applications count
     await req.user.incrementTaskStat('tasksAppliedTo');
     
-    // Populate application details
     await application.populate('tasker', 'fullName email phone skills rating');
     await application.populate('task', 'title category area');
 
-    // Emit WebSocket event to task owner about new application
     try {
       const io = req.app.get('io');
       if (io) {
@@ -405,12 +370,8 @@ export const applyForTask = async (req, res) => {
   }
 };
 
-// @desc    Get applications for task
-// @route   GET /api/tasks/:id/applications
-// @access  Private (Task owner only)
 export const getTaskApplications = async (req, res) => {
   try {
-    // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({
         success: false,
@@ -427,12 +388,10 @@ export const getTaskApplications = async (req, res) => {
       });
     }
 
-    // Enhanced access control for task applications
     const isCustomer = task.customer.toString() === req.user._id.toString();
     const isSelectedTasker = task.selectedTasker && 
                              task.selectedTasker.toString() === req.user._id.toString();
 
-    // For scheduled, completed, and cancelled tasks, both customer and selectedTasker can view applications
     if (task.status === 'scheduled' || task.status === 'completed' || task.status === 'cancelled') {
       if (!isCustomer && !isSelectedTasker) {
         return res.status(403).json({
@@ -441,7 +400,6 @@ export const getTaskApplications = async (req, res) => {
         });
       }
     } else {
-      // For other statuses (active, etc.), only the customer can view applications
       if (!isCustomer) {
         return res.status(403).json({
           success: false,
@@ -466,12 +424,8 @@ export const getTaskApplications = async (req, res) => {
   }
 };
 
-// @desc    Select tasker for task
-// @route   POST /api/tasks/:id/select-tasker
-// @access  Private (Task owner only)
 export const selectTasker = async (req, res) => {
   try {
-    // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({
         success: false,
@@ -481,7 +435,6 @@ export const selectTasker = async (req, res) => {
 
     const { taskerId, agreedTime, agreedPayment } = req.body;
 
-    // Validate required fields
     if (!taskerId || !agreedTime || !agreedPayment) {
       return res.status(400).json({
         success: false,
@@ -489,7 +442,6 @@ export const selectTasker = async (req, res) => {
       });
     }
 
-    // Validate ObjectId format for taskerId
     if (!mongoose.Types.ObjectId.isValid(taskerId)) {
       return res.status(400).json({
         success: false,
@@ -497,7 +449,6 @@ export const selectTasker = async (req, res) => {
       });
     }
 
-    // Validate agreedTime is a valid date
     const agreedTimeDate = new Date(agreedTime);
     if (isNaN(agreedTimeDate.getTime())) {
       return res.status(400).json({
@@ -515,7 +466,6 @@ export const selectTasker = async (req, res) => {
       });
     }
 
-    // Verify user is task owner
     if (task.customer.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -530,7 +480,6 @@ export const selectTasker = async (req, res) => {
       });
     }
 
-    // Validate agreed time is within task date range
     if (agreedTimeDate < task.startDate || agreedTimeDate > task.endDate) {
       return res.status(400).json({
         success: false,
@@ -538,10 +487,9 @@ export const selectTasker = async (req, res) => {
       });
     }
 
-    // Check if this is a targeted task
     const isTargetedTask = task.isTargeted && task.targetedTasker && task.targetedTasker.toString() === taskerId;
     
-    // Find the tasker's application for this task
+
     let application = await Application.findOne({
       task: req.params.id,
       tasker: taskerId,
@@ -555,7 +503,6 @@ export const selectTasker = async (req, res) => {
       });
     }
 
-    // Check that tasker has confirmed availability
     if (!application.confirmedByTasker) {
       return res.status(400).json({
         success: false,
@@ -563,7 +510,6 @@ export const selectTasker = async (req, res) => {
       });
     }
 
-    // Check that agreed time matches the tasker's confirmed time (if provided)
     if (application.confirmedTime && Math.abs(agreedTimeDate.getTime() - application.confirmedTime.getTime()) > 60000) {
       return res.status(400).json({
         success: false,
@@ -571,7 +517,6 @@ export const selectTasker = async (req, res) => {
       });
     }
 
-    // Verify tasker exists and is active
     const tasker = await User.findById(taskerId);
     if (!tasker || tasker.role !== 'tasker') {
       return res.status(404).json({
@@ -580,16 +525,13 @@ export const selectTasker = async (req, res) => {
       });
     }
 
-    // Start transaction
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-      // Update task with selected tasker but keep status as 'active' until payment is made
       task.selectedTasker = taskerId;
       task.agreedPayment = agreedPayment;
       task.agreedTime = agreedTimeDate;
-      // Don't change status to 'scheduled' yet - wait for advance payment
       
       console.log('Saving task with data:', {
         taskId: task._id,
@@ -602,11 +544,9 @@ export const selectTasker = async (req, res) => {
       
       console.log('Task saved successfully');
 
-      // Update application status
       application.status = 'confirmed';
       await application.save({ session });
 
-      // Reject all other applications (if any exist for this task)
       await Application.updateMany(
         { 
           task: req.params.id, 
@@ -619,7 +559,6 @@ export const selectTasker = async (req, res) => {
 
       await session.commitTransaction();
 
-      // Populate and return updated task
       await task.populate('selectedTasker', 'fullName email phone taskerProfile rating statistics');
       await task.populate('targetedTasker', 'fullName email phone taskerProfile rating statistics');
       await task.populate('customer', 'fullName email');
@@ -631,11 +570,9 @@ export const selectTasker = async (req, res) => {
         selectedTasker: task.selectedTasker
       });
 
-      // Emit WebSocket event to selected tasker and customer
       try {
         const io = req.app.get('io');
         if (io) {
-          // Notify selected tasker
           io.to(`user-${task.selectedTasker._id || task.selectedTasker}`).emit('task-update', {
             type: 'tasker-selected',
             taskId: task._id,
@@ -643,7 +580,6 @@ export const selectTasker = async (req, res) => {
             message: `You have been selected for task ${task.title}. Please proceed to confirm and complete payment process.`,
             timestamp: new Date().toISOString()
           });
-          // Notify customer (confirmation info)
           io.to(`user-${task.customer._id || task.customer}`).emit('task-update', {
             type: 'tasker-selected',
             taskId: task._id,
@@ -688,12 +624,8 @@ export const selectTasker = async (req, res) => {
   }
 };
 
-// @desc    Confirm availability time and payment (tasker)
-// @route   POST /api/tasks/:id/confirm-time
-// @access  Private (Tasker only - must have applied)
 export const confirmTime = async (req, res) => {
   try {
-    // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({
         success: false,
@@ -701,7 +633,6 @@ export const confirmTime = async (req, res) => {
       });
     }
 
-    // Verify user is a tasker
     if (req.user.role !== 'tasker') {
       return res.status(403).json({
         success: false,
@@ -711,7 +642,6 @@ export const confirmTime = async (req, res) => {
 
     const { confirmedTime, confirmedPayment } = req.body;
 
-    // Validate required fields
     if (!confirmedTime || !confirmedPayment) {
       return res.status(400).json({
         success: false,
@@ -719,7 +649,6 @@ export const confirmTime = async (req, res) => {
       });
     }
 
-    // Validate confirmedTime is a valid date
     const confirmedTimeDate = new Date(confirmedTime);
     if (isNaN(confirmedTimeDate.getTime())) {
       return res.status(400).json({
@@ -728,7 +657,6 @@ export const confirmTime = async (req, res) => {
       });
     }
 
-    // Ensure confirmedTime is in the future
     if (confirmedTimeDate <= new Date()) {
       return res.status(400).json({
         success: false,
@@ -736,7 +664,6 @@ export const confirmTime = async (req, res) => {
       });
     }
 
-    // Validate confirmedPayment is a positive number
     if (typeof confirmedPayment !== 'number' || confirmedPayment <= 0) {
       return res.status(400).json({
         success: false,
@@ -744,7 +671,6 @@ export const confirmTime = async (req, res) => {
       });
     }
 
-    // Find the task
     const task = await Task.findById(req.params.id);
     if (!task) {
       return res.status(404).json({
@@ -753,7 +679,6 @@ export const confirmTime = async (req, res) => {
       });
     }
 
-    // Ensure task is still in active state
     if (task.status !== 'active') {
       return res.status(400).json({
         success: false,
@@ -761,7 +686,6 @@ export const confirmTime = async (req, res) => {
       });
     }
 
-    // Ensure confirmedPayment is within task's min/max range
     if (confirmedPayment < task.minPayment || confirmedPayment > task.maxPayment) {
       return res.status(400).json({
         success: false,
@@ -769,7 +693,6 @@ export const confirmTime = async (req, res) => {
       });
     }
 
-    // Ensure confirmedTime is within task's date range
     if (confirmedTimeDate < task.startDate || confirmedTimeDate > task.endDate) {
       return res.status(400).json({
         success: false,
@@ -777,30 +700,26 @@ export const confirmTime = async (req, res) => {
       });
     }
 
-    // Check if this is a targeted task where the current user is the targeted tasker
     const isTargetedTasker = task.isTargeted && task.targetedTasker && task.targetedTasker.toString() === req.user._id.toString();
     
     let application;
     
     if (isTargetedTasker) {
-      // For targeted tasks, create an application if it doesn't exist
       application = await Application.findOne({
         task: req.params.id,
         tasker: req.user._id
       });
       
       if (!application) {
-        // Create a new application for the targeted tasker
         application = await Application.create({
           task: req.params.id,
           tasker: req.user._id,
-          proposedPayment: confirmedPayment, // Use confirmed payment as proposed payment
+          proposedPayment: confirmedPayment,
           note: 'Direct hire application',
           status: 'pending'
         });
       }
     } else {
-      // For regular tasks, find the existing application
       application = await Application.findOne({
         task: req.params.id,
         tasker: req.user._id
@@ -813,7 +732,6 @@ export const confirmTime = async (req, res) => {
         });
       }
 
-      // Check if application can be confirmed by tasker
       if (!application.canBeConfirmedByTasker()) {
         return res.status(400).json({
           success: false,
@@ -822,18 +740,15 @@ export const confirmTime = async (req, res) => {
       }
     }
 
-    // Update the application
     application.confirmedByTasker = true;
     application.confirmedTime = confirmedTimeDate;
     application.confirmedPayment = confirmedPayment;
     
     await application.save();
 
-    // Populate application details
     await application.populate('task', 'title category area startDate endDate minPayment maxPayment');
     await application.populate('tasker', 'fullName email phone');
 
-    // Notify task owner that tasker confirmed availability
     try {
       const io = req.app.get('io');
       if (io) {
@@ -874,12 +789,8 @@ export const confirmTime = async (req, res) => {
   }
 };
 
-// @desc    Confirm schedule (tasker)
-// @route   POST /api/tasks/:id/confirm-schedule
-// @access  Private (Selected tasker only)
 export const confirmSchedule = async (req, res) => {
   try {
-    // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({
         success: false,
@@ -896,7 +807,6 @@ export const confirmSchedule = async (req, res) => {
       });
     }
 
-    // Verify user is selected tasker
     if (!task.selectedTasker || task.selectedTasker.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -918,7 +828,6 @@ export const confirmSchedule = async (req, res) => {
     await task.populate('selectedTasker', 'fullName email phone');
     await task.populate('targetedTasker', 'fullName email phone');
 
-    // Notify customer that the tasker confirmed schedule
     try {
       const io = req.app.get('io');
       if (io) {
@@ -948,12 +857,8 @@ export const confirmSchedule = async (req, res) => {
   }
 };
 
-// @desc    Complete task (customer)
-// @route   POST /api/tasks/:id/complete
-// @access  Private (Task owner only)
 export const completeTask = async (req, res) => {
   try {
-    // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({
         success: false,
@@ -972,7 +877,6 @@ export const completeTask = async (req, res) => {
       });
     }
 
-    // Verify user is task owner
     if (task.customer.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -987,13 +891,11 @@ export const completeTask = async (req, res) => {
       });
     }
 
-    // Update task
     task.status = 'completed';
     task.customerRating = rating;
     task.customerReview = review;
     await task.save();
 
-    // Update tasker's rating and statistics
     if (rating && task.selectedTasker) {
       const tasker = await User.findById(task.selectedTasker);
       if (tasker) {
@@ -1002,14 +904,12 @@ export const completeTask = async (req, res) => {
       }
     }
 
-    // Update customer's completed tasks statistics
     await req.user.incrementTaskStat('tasksCompleted');
 
     await task.populate('customer', 'fullName email');
     await task.populate('selectedTasker', 'fullName email phone');
     await task.populate('targetedTasker', 'fullName email phone');
 
-    // Notify selected tasker that customer completed the task
     try {
       const io = req.app.get('io');
       if (io && task.selectedTasker) {
@@ -1039,12 +939,8 @@ export const completeTask = async (req, res) => {
   }
 };
 
-// @desc    Tasker complete task
-// @route   POST /api/tasks/:id/tasker-complete
-// @access  Private (Selected tasker only)
 export const taskerCompleteTask = async (req, res) => {
   try {
-    // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({
         success: false,
@@ -1063,7 +959,6 @@ export const taskerCompleteTask = async (req, res) => {
       });
     }
 
-    // Verify user is selected tasker
     if (!task.selectedTasker || task.selectedTasker.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -1078,7 +973,6 @@ export const taskerCompleteTask = async (req, res) => {
       });
     }
 
-    // Update task with completion details
     if (completionPhotos) task.completionPhotos = completionPhotos;
     if (notes) task.completionNotes = notes;
     
@@ -1088,7 +982,6 @@ export const taskerCompleteTask = async (req, res) => {
     await task.populate('selectedTasker', 'fullName email phone');
     await task.populate('targetedTasker', 'fullName email phone');
 
-    // Notify customer that tasker marked task as complete
     try {
       const io = req.app.get('io');
       if (io) {
@@ -1118,9 +1011,6 @@ export const taskerCompleteTask = async (req, res) => {
   }
 };
 
-// @desc    Get user's tasks
-// @route   GET /api/tasks/my-tasks
-// @access  Private
 export const getMyTasks = async (req, res) => {
   try {
     const { status } = req.query;
@@ -1150,9 +1040,6 @@ export const getMyTasks = async (req, res) => {
   }
 };
 
-// @desc    Get user's applications
-// @route   GET /api/tasks/my-applications
-// @access  Private (Tasker only)
 export const getMyApplications = async (req, res) => {
   try {
     if (req.user.role !== 'tasker') {
@@ -1178,15 +1065,11 @@ export const getMyApplications = async (req, res) => {
   }
 };
 
-// @desc    Get tasks by customer ID
-// @route   GET /api/tasks/customer/:customerId
-// @access  Public
 export const getTasksByCustomerId = async (req, res) => {
   try {
     const { customerId } = req.params;
     const { status, page = 1, limit = 10 } = req.query;
 
-    // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(customerId)) {
       return res.status(400).json({
         success: false,
@@ -1194,7 +1077,6 @@ export const getTasksByCustomerId = async (req, res) => {
       });
     }
 
-    // Verify customer exists
     const customer = await User.findById(customerId);
     if (!customer || customer.role !== 'customer') {
       return res.status(404).json({
@@ -1203,23 +1085,18 @@ export const getTasksByCustomerId = async (req, res) => {
       });
     }
 
-    // Build query
     const query = { customer: customerId };
     if (status) query.status = status;
 
-    // Calculate pagination
     const skip = (page - 1) * limit;
 
-    // Execute query
     const tasks = await Task.find(query)
       .populate('selectedTasker', 'fullName email rating statistics')
       .populate('targetedTasker', 'fullName email rating statistics')
-      .populate('applications') // Populate applications virtual
+      .populate('applications')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
-
-    // Manually populate application count for each task to ensure consistency
     const tasksWithApplicationCount = await Promise.all(
       tasks.map(async (task) => {
         const applicationCount = await Application.countDocuments({ task: task._id });
@@ -1251,12 +1128,8 @@ export const getTasksByCustomerId = async (req, res) => {
   }
 };
 
-// @desc    Mark scheduled task as completed
-// @route   POST /api/tasks/:id/mark-complete
-// @access  Private (Customer or selected tasker only)
 export const markTaskComplete = async (req, res) => {
   try {
-    // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({
         success: false,
@@ -1273,9 +1146,7 @@ export const markTaskComplete = async (req, res) => {
         success: false,
         message: 'Task not found'
       });
-    }
-
-    // Verify user is customer or selected tasker or targeted tasker
+    }    
     const isCustomer = task.customer.toString() === req.user._id.toString();
     const isSelectedTasker = task.selectedTasker && task.selectedTasker.toString() === req.user._id.toString();
     const isTargetedTasker = task.targetedTasker && task.targetedTasker.toString() === req.user._id.toString();
@@ -1287,7 +1158,6 @@ export const markTaskComplete = async (req, res) => {
       });
     }
 
-    // Verify task is scheduled
     if (task.status !== 'scheduled') {
       return res.status(400).json({
         success: false,
@@ -1295,14 +1165,12 @@ export const markTaskComplete = async (req, res) => {
       });
     }
 
-    // Handle customer completion
     if (isCustomer) {
       if (rating) task.customerRating = rating;
       if (review) task.customerReview = review;
       task.customerCompletedAt = new Date();
     }
     
-    // Handle tasker completion
     if (isSelectedTasker || isTargetedTasker) {
       if (completionPhotos && completionPhotos.length > 0) {
         task.completionPhotos = completionPhotos;
@@ -1313,41 +1181,34 @@ export const markTaskComplete = async (req, res) => {
       task.taskerCompletedAt = new Date();
     }
 
-    // Check if both parties have completed
     const bothCompleted = task.taskerCompletedAt && task.customerCompletedAt;
     
     if (bothCompleted) {
       task.status = 'completed';
       
-      // Update statistics for both users
       const workingTaskerId = task.selectedTasker || task.targetedTasker;
       if (workingTaskerId) {
         const tasker = await User.findById(workingTaskerId);
         if (tasker) {
           await tasker.incrementTaskStat('tasksCompleted');
           
-          // Update tasker's rating if customer provided one
           if (task.customerRating) {
             await tasker.updateRating(task.customerRating);
           }
         }
       }
 
-      // Update customer's completed tasks statistics and rating
       const customer = await User.findById(task.customer);
       if (customer) {
         await customer.incrementTaskStat('tasksCompleted');
         
-        // Update customer's rating if tasker provided one
         if (task.taskerRatingForCustomer) {
           await customer.updateRating(task.taskerRatingForCustomer);
         }
       }
 
-      // Auto-create feedback records when both parties have completed
       const Feedback = (await import('../models/Feedback.js')).default;
       
-      // Create customer-to-tasker feedback if rating/review exists
       if (task.customerRating || task.customerReview) {
         try {
           await Feedback.create({
@@ -1366,11 +1227,9 @@ export const markTaskComplete = async (req, res) => {
           });
         } catch (feedbackError) {
           console.error('Error creating customer feedback:', feedbackError);
-          // Don't fail the task completion if feedback creation fails
         }
       }
 
-      // Create tasker-to-customer feedback if rating/review exists
       if (task.taskerRatingForCustomer || task.taskerFeedback) {
         try {
           await Feedback.create({
@@ -1389,14 +1248,12 @@ export const markTaskComplete = async (req, res) => {
           });
         } catch (feedbackError) {
           console.error('Error creating tasker feedback:', feedbackError);
-          // Don't fail the task completion if feedback creation fails
         }
       }
     }
 
     await task.save();
 
-    // Populate for response
     await task.populate('customer', 'fullName email phone');
     await task.populate('selectedTasker', 'fullName email phone');
     await task.populate('targetedTasker', 'fullName email phone');
@@ -1422,12 +1279,8 @@ export const markTaskComplete = async (req, res) => {
   }
 };
 
-// @desc    Cancel scheduled task
-// @route   POST /api/tasks/:id/cancel-schedule
-// @access  Private (Customer or selected tasker only)
 export const cancelScheduledTask = async (req, res) => {
   try {
-    // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({
         success: false,
@@ -1446,7 +1299,6 @@ export const cancelScheduledTask = async (req, res) => {
       });
     }
 
-    // Verify user is customer or selected tasker or targeted tasker
     const isCustomer = task.customer.toString() === req.user._id.toString();
     const isSelectedTasker = task.selectedTasker && task.selectedTasker.toString() === req.user._id.toString();
     const isTargetedTasker = task.targetedTasker && task.targetedTasker.toString() === req.user._id.toString();
@@ -1458,7 +1310,6 @@ export const cancelScheduledTask = async (req, res) => {
       });
     }
 
-    // Verify task is scheduled
     if (task.status !== 'scheduled') {
       return res.status(400).json({
         success: false,
@@ -1466,21 +1317,18 @@ export const cancelScheduledTask = async (req, res) => {
       });
     }
 
-    // Update task status back to active and clear scheduling details
     task.status = 'active';
     task.selectedTasker = null;
     task.agreedTime = null;
     task.agreedPayment = null;
     task.taskerConfirmed = false;
     
-    // Add cancellation details
     task.cancellationReason = reason;
     task.cancelledBy = req.user._id;
     task.cancelledAt = new Date();
 
     await task.save();
 
-    // Populate for response
     await task.populate('customer', 'fullName email phone');
 
     res.status(200).json({
@@ -1497,12 +1345,8 @@ export const cancelScheduledTask = async (req, res) => {
   }
 };
 
-// @desc    Upload task photos
-// @route   POST /api/tasks/upload-photos
-// @access  Private (Customers only)
 export const uploadTaskPhotos = async (req, res) => {
   try {
-    // Verify user is customer
     if (req.user.role !== 'customer') {
       return res.status(403).json({
         success: false,
@@ -1530,7 +1374,6 @@ export const uploadTaskPhotos = async (req, res) => {
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
 
     for (const photo of photos) {
-      // Validate file type
       if (!allowedTypes.includes(photo.mimetype)) {
         return res.status(400).json({
           success: false,
@@ -1538,7 +1381,6 @@ export const uploadTaskPhotos = async (req, res) => {
         });
       }
 
-      // Validate file size (5MB limit per photo)
       if (photo.size > 5 * 1024 * 1024) {
         return res.status(400).json({
           success: false,
@@ -1546,7 +1388,6 @@ export const uploadTaskPhotos = async (req, res) => {
         });
       }
 
-      // Save file to disk similar to completion photos: uploads/tasks/<userId>/<filename>
       const userId = String(req.user._id);
       const baseUploadsDir = path.join(process.cwd(), 'uploads', 'tasks', userId);
       fs.mkdirSync(baseUploadsDir, { recursive: true });
@@ -1584,9 +1425,6 @@ export const uploadTaskPhotos = async (req, res) => {
   }
 };
 
-// @desc    Upload completion photos
-// @route   POST /api/tasks/upload-completion-photo
-// @access  Private (Taskers only)
 export const uploadCompletionPhoto = async (req, res) => {
   try {
     const { taskId } = req.body;
@@ -1601,7 +1439,6 @@ export const uploadCompletionPhoto = async (req, res) => {
       });
     }
 
-    // Optional: ensure the task exists and the requester is related (basic existence check)
     const task = await Task.findById(taskId);
     if (!task) {
       return res.status(404).json({ success: false, message: 'Task not found' });
@@ -1609,7 +1446,6 @@ export const uploadCompletionPhoto = async (req, res) => {
 
     const photo = req.files.photo;
 
-    // Validate file type
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     if (!allowedTypes.includes(photo.mimetype)) {
       return res.status(400).json({
@@ -1618,7 +1454,6 @@ export const uploadCompletionPhoto = async (req, res) => {
       });
     }
 
-    // Validate file size (10MB limit)
     if (photo.size > 10 * 1024 * 1024) {
       return res.status(400).json({
         success: false,
@@ -1626,11 +1461,9 @@ export const uploadCompletionPhoto = async (req, res) => {
       });
     }
 
-    // Create destination directory: uploads/completions/<taskId>
     const baseUploadsDir = path.join(process.cwd(), 'uploads', 'completions', String(taskId));
     fs.mkdirSync(baseUploadsDir, { recursive: true });
 
-    // Preserve extension from original filename
     const originalExt = path.extname(photo.name) || '.jpg';
     const safeExt = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(originalExt.toLowerCase())
       ? originalExt
@@ -1639,10 +1472,8 @@ export const uploadCompletionPhoto = async (req, res) => {
     const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`;
     const targetPath = path.join(baseUploadsDir, filename);
 
-    // Save file to disk
     await photo.mv(targetPath);
 
-    // Build server-relative URL for static serving
     const relativeUrl = `/uploads/completions/${taskId}/${filename}`;
 
     return res.status(200).json({
@@ -1663,18 +1494,14 @@ export const uploadCompletionPhoto = async (req, res) => {
   }
 };
 
-// @desc    Get category statistics with task counts
-// @route   GET /api/tasks/category-stats
-// @access  Public
 export const getCategoryStats = async (req, res) => {
   try {
-    // Get task counts by category for active tasks only
     const categoryStats = await Task.aggregate([
       {
         $match: {
           status: 'active',
           startDate: { $gt: new Date() },
-          isTargeted: false  // Only count non-targeted tasks for public stats
+          isTargeted: false
         }
       },
       {
@@ -1688,13 +1515,11 @@ export const getCategoryStats = async (req, res) => {
       }
     ]);
 
-    // Transform the data into a more usable format
     const categoryData = categoryStats.reduce((acc, item) => {
       acc[item._id] = item.count;
       return acc;
     }, {});
 
-    // Define all possible categories with default count of 0
     const allCategories = [
       'Cleaning', 'Repairing', 'Handyman', 'Maintenance', 
       'Gardening', 'Landscaping', 'Installations', 'Security',
@@ -1702,7 +1527,6 @@ export const getCategoryStats = async (req, res) => {
       'Carpentry', 'Repairs', 'Delivery', 'Other'
     ];
 
-    // Ensure all categories are included with their counts
     const result = allCategories.map(category => ({
       category,
       count: categoryData[category] || 0

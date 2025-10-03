@@ -1,4 +1,3 @@
-// Global error handling middleware
 export const errorHandler = (err, req, res, next) => {
   // Log error details
   if (process.env.NODE_ENV === 'development') {

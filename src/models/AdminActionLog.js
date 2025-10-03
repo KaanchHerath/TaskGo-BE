@@ -100,22 +100,18 @@ const adminActionLogSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes for performance
 adminActionLogSchema.index({ adminId: 1, createdAt: -1 });
 adminActionLogSchema.index({ actionType: 1, createdAt: -1 });
 adminActionLogSchema.index({ targetId: 1, targetModel: 1 });
 adminActionLogSchema.index({ createdAt: -1 });
 adminActionLogSchema.index({ 'metadata.searchable': 1 });
 
-// Compound index for common queries
 adminActionLogSchema.index({ adminId: 1, actionType: 1, createdAt: -1 });
 
-// Virtual for formatted timestamp
 adminActionLogSchema.virtual('formattedTimestamp').get(function() {
   return this.createdAt.toISOString();
 });
 
-// Virtual for action category
 adminActionLogSchema.virtual('actionCategory').get(function() {
   const categories = {
     'USER_APPROVED': 'user_management',
@@ -158,12 +154,12 @@ adminActionLogSchema.virtual('actionCategory').get(function() {
   return categories[this.actionType] || 'other';
 });
 
-// Pre-save middleware to validate target exists
+
 adminActionLogSchema.pre('save', async function(next) {
   try {
-    // Skip validation for system maintenance actions that might not have a specific target
+
     if (this.actionType === 'SYSTEM_MAINTENANCE' || this.actionType === 'ANALYTICS_VIEWED') {
-      // Validate that admin exists and has admin role
+
       const admin = await mongoose.model('User').findById(this.adminId);
       if (!admin || admin.role !== 'admin') {
         return next(new Error('Invalid admin ID or user is not an admin'));
@@ -171,7 +167,7 @@ adminActionLogSchema.pre('save', async function(next) {
       return next();
     }
     
-    // Validate that the target exists in the specified model
+
     const Model = mongoose.model(this.targetModel);
     const target = await Model.findById(this.targetId);
     
@@ -179,7 +175,7 @@ adminActionLogSchema.pre('save', async function(next) {
       return next(new Error(`Target ${this.targetModel} with ID ${this.targetId} not found`));
     }
     
-    // Validate that admin exists and has admin role
+
     const admin = await mongoose.model('User').findById(this.adminId);
     if (!admin || admin.role !== 'admin') {
       return next(new Error('Invalid admin ID or user is not an admin'));
@@ -191,7 +187,7 @@ adminActionLogSchema.pre('save', async function(next) {
   }
 });
 
-// Instance methods
+  // Instance methods
 adminActionLogSchema.methods.getTargetDetails = async function() {
   try {
     const Model = mongoose.model(this.targetModel);

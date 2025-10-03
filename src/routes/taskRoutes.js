@@ -28,7 +28,6 @@ router.get('/', getTasks);
 router.get('/category-stats', getCategoryStats);
 router.get('/customer/:customerId', getTasksByCustomerId);
 
-// Protected routes
 router.get('/my-tasks', verifyToken, getMyTasks);
 router.get('/my-applications', verifyToken, getMyApplications);
 

@@ -11,25 +11,9 @@ const router = express.Router();
 
 
 router.use(verifyToken);
-
-// @route   POST /api/chat
-// @desc    Send a new chat message
-// @access  Private
 router.post('/', sendMessage);
-
-// @route   GET /api/chat/unread-count
-// @desc    Get unread message count for the authenticated user
-// @access  Private
 router.get('/unread-count', getUnreadCount);
-
-// @route   GET /api/chat/:taskId/:userId
-// @desc    Get conversation between authenticated user and specified user for a task
-// @access  Private
 router.get('/:taskId/:userId', getConversation);
-
-// @route   PUT /api/chat/:taskId/mark-read
-// @desc    Mark all messages as read for a specific task
-// @access  Private
 router.put('/:taskId/mark-read', markMessagesAsRead);
 
 export default router; 
