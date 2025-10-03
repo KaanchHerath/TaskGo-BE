@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
-// ESM-compatible __dirname
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -113,7 +113,7 @@ export const register = async (req, res) => {
       qualificationDocuments
     } = req.body;
     
-    // Check if user already exists with specific field checks
+
     const existingEmail = await User.findOne({ email: email.toLowerCase() });
     if (existingEmail) {
       return sendError(res, 400, "An account with this email address already exists. Please use a different email or try logging in.", "duplicate_email", "email");
@@ -152,7 +152,7 @@ export const register = async (req, res) => {
     const user = new User(userData);
     await user.save();
 
-    // Create token
+
     const token = issueAccessToken(user);
     const refreshToken = issueRefreshToken(user);
     setRefreshCookie(res, refreshToken);
@@ -179,7 +179,6 @@ export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Check database connection status
     if (mongoose.connection.readyState !== 1) {
       console.error('Database not connected. Ready state:', mongoose.connection.readyState);
       return sendError(res, 503, "Database connection is not available. Please try again later.", "DB_CONNECTION_ERROR");
@@ -196,17 +195,16 @@ export const login = async (req, res) => {
       return sendError(res, 401, "Invalid email or password");
     }
 
-    // Check if user is suspended
     if (user.isSuspended) {
       return sendError(res, 403, "Account is suspended. Please contact support for assistance.", "suspended");
     }
 
-    // Check tasker approval status
+
     let approvalStatus = null;
     if (user.role === 'tasker') {
       approvalStatus = user.taskerProfile?.approvalStatus || 'pending';
       
-      // If tasker is not approved, provide specific message
+ 
       if (approvalStatus !== 'approved') {
         return sendError(res, 403, 
           approvalStatus === 'pending' 
@@ -221,7 +219,7 @@ export const login = async (req, res) => {
     const refreshToken = issueRefreshToken(user);
     setRefreshCookie(res, refreshToken);
     
-    // Prepare user response data
+
     const userData = {
       id: user._id,
       username: user.username,
@@ -231,7 +229,6 @@ export const login = async (req, res) => {
       role: user.role
     };
 
-    // Add approval status for taskers
     if (user.role === 'tasker') {
       userData.approvalStatus = approvalStatus;
       userData.isApproved = user.taskerProfile?.isApproved || false;
@@ -270,7 +267,7 @@ export const registerTasker = async (req, res) => {
       district
     } = req.body;
     
-    // Validate email and phone uniqueness
+
     const existingUser = await User.findOne({
       $or: [
         { email: email.toLowerCase() },
@@ -281,7 +278,7 @@ export const registerTasker = async (req, res) => {
       return sendError(res, 400, "User with this email or phone already exists", "duplicate_user");
     }
 
-    // Handle file uploads using express-fileupload
+
     if (!req.files || !req.files.idDocument) {
       return sendError(res, 400, "ID Document is required", "missing_id_document");
     }
@@ -289,38 +286,35 @@ export const registerTasker = async (req, res) => {
     const idDocumentFile = req.files.idDocument;
     const qualificationFiles = req.files.qualificationDocuments || [];
 
-    // Ensure qualificationFiles is an array
+
     const qualificationFilesArray = Array.isArray(qualificationFiles) ? qualificationFiles : [qualificationFiles];
 
-    // Save files to disk
     const uploadPath = path.join(__dirname, '../../uploads/tasker-docs');
     fs.mkdirSync(uploadPath, { recursive: true });
 
-    // Save ID document
+
     const idDocumentFileName = Date.now() + '-' + Math.round(Math.random() * 1E9) + '-' + idDocumentFile.name;
     const idDocumentPath = path.join(uploadPath, idDocumentFileName);
     await idDocumentFile.mv(idDocumentPath);
 
-    // Store relative path for database (for serving via /uploads route)
+
     const idDocumentRelativePath = `uploads/tasker-docs/${idDocumentFileName}`;
 
-    // Save qualification documents
+
     const qualificationPaths = [];
     for (const file of qualificationFilesArray) {
       if (file && file.name) {
         const fileName = Date.now() + '-' + Math.round(Math.random() * 1E9) + '-' + file.name;
         const filePath = path.join(uploadPath, fileName);
         await file.mv(filePath);
-        // Store relative path for database
         qualificationPaths.push(`uploads/tasker-docs/${fileName}`);
       }
     }
     
-    // Hash password
+
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-    
-    // Save user
+
     const user = new User({
       email: email.toLowerCase(),
       password: hashedPassword,
@@ -337,10 +331,10 @@ export const registerTasker = async (req, res) => {
     });
     await user.save();
     
-    // Create JWT with approval status for taskers
+
     const tokenPayload = { userId: user._id, role: user.role };
     if (user.role === 'tasker') {
-      tokenPayload.isApproved = false; // New taskers are not approved by default
+      tokenPayload.isApproved = false; 
       tokenPayload.approvalStatus = 'pending';
     }
     
@@ -382,7 +376,6 @@ export const refreshToken = async (req, res) => {
       return sendError(res, 401, 'User not found', "user_not_found");
     }
     const newAccess = issueAccessToken(user);
-    // Optionally rotate refresh
     const newRefresh = issueRefreshToken(user);
     setRefreshCookie(res, newRefresh);
     return res.json({ 
