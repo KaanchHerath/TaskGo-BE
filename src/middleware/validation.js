@@ -20,37 +20,71 @@ const commonSchemas = {
 // Auth validation schemas
 const authSchemas = {
   register: Joi.object({
+    username: Joi.string().alphanum().min(3).max(30).required(),
     fullName: Joi.string().min(2).max(50).required(),
     email: commonSchemas.email,
-    password: commonSchemas.password,
-    confirmPassword: Joi.string().valid(Joi.ref('password')).required(),
+    password: Joi.string()
+      .min(8)
+      .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).*$/)
+      .required()
+      .messages({
+        'string.pattern.base': 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
+      }),
     phone: commonSchemas.phone.required(),
-    role: Joi.string().valid('customer', 'tasker').required()
+    role: Joi.string().valid('customer', 'tasker').required(),
+    // Customer specific fields
+    province: Joi.when('role', {
+      is: 'customer',
+      then: Joi.string().required(),
+      otherwise: Joi.forbidden()
+    }),
+    // Tasker specific fields
+    skills: Joi.when('role', {
+      is: 'tasker',
+      then: Joi.array().items(Joi.string()).min(1).required(),
+      otherwise: Joi.forbidden()
+    }),
+    country: Joi.when('role', {
+      is: 'tasker',
+      then: Joi.string().required(),
+      otherwise: Joi.forbidden()
+    }),
+    area: Joi.when('role', {
+      is: 'tasker',
+      then: Joi.string().required(),
+      otherwise: Joi.forbidden()
+    }),
+    identificationDocument: Joi.when('role', {
+      is: 'tasker',
+      then: Joi.string().required(),
+      otherwise: Joi.forbidden()
+    }),
+    qualificationDocuments: Joi.when('role', {
+      is: 'tasker',
+      then: Joi.array().items(Joi.string()).min(1).required(),
+      otherwise: Joi.forbidden()
+    })
   }),
 
   login: Joi.object({
     email: commonSchemas.email,
-    password: commonSchemas.password
+    password: Joi.string().required()
   }),
 
   taskerRegistration: Joi.object({
     fullName: Joi.string().min(2).max(50).required(),
     email: commonSchemas.email,
-    password: commonSchemas.password,
-    confirmPassword: Joi.string().valid(Joi.ref('password')).required(),
+    password: Joi.string()
+      .min(8)
+      .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).*$/)
+      .required()
+      .messages({
+        'string.pattern.base': 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
+      }),
     phone: commonSchemas.phone.required(),
-    categories: Joi.array().items(Joi.string()).min(1).required(),
-    experience: Joi.string().required(),
-    hourlyRate: Joi.number().min(0).required(),
-    availability: Joi.object({
-      monday: Joi.boolean().default(false),
-      tuesday: Joi.boolean().default(false),
-      wednesday: Joi.boolean().default(false),
-      thursday: Joi.boolean().default(false),
-      friday: Joi.boolean().default(false),
-      saturday: Joi.boolean().default(false),
-      sunday: Joi.boolean().default(false)
-    }).required()
+    skills: Joi.array().items(Joi.string()).min(1).required(),
+    province: Joi.string().required(),
+    district: Joi.string().required()
   })
 };
 
@@ -141,11 +175,6 @@ const validate = (schema, property = 'body') => {
 
     if (error) {
       const errors = error.details.map(detail => detail.message);
-              // Validation failed 
-        endpoint: req.originalUrl, 
-        errors 
-      };
-      
       return res.status(400).json({
         success: false,
         message: 'Validation error',
@@ -157,6 +186,7 @@ const validate = (schema, property = 'body') => {
     req[property] = value;
     next();
   };
+};
 
 
 // Export validation functions

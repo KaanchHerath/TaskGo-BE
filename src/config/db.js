@@ -3,20 +3,13 @@ import mongoose from "mongoose";
 
 const connectDB = async () => {
     try {
-        const options = {
-            // Connection pooling options
-            maxPoolSize: 10, 
-            minPoolSize: 2,  
-            // Timeout options
+        const options = { 
             serverSelectionTimeoutMS: 30000, 
             socketTimeoutMS: 45000, 
             connectTimeoutMS: 30000, 
-            // Retry options
             retryWrites: true,
             retryReads: true,
-            // Heartbeat options
             heartbeatFrequencyMS: 10000,
-            // Buffer options 
             bufferCommands: false, 
         };
 

@@ -6,7 +6,7 @@ import { Server } from "socket.io";
 import connectDB from "./config/db.js";
 
 import jobRequestRoutes from "./routes/jobRequests.js";
-import authRoutes from "./routes/auth.js";
+import authRoutes from "./routes/authRoutes.js";
 import statsRoutes from "./routes/statsRoutes.js";
 import healthRoutes from "./routes/health.js";
 import userRoutes from './routes/userRoutes.js';

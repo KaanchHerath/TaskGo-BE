@@ -7,7 +7,18 @@ import User from "../models/User.js";
  */
 export const socketAuth = async (socket, next) => {
   try {
-    const token = socket.handshake.auth.token;
+    const auth = socket.handshake?.auth || {};
+    const headerAuth = socket.handshake?.headers?.authorization;
+    const query = socket.handshake?.query || {};
+
+    const tokenFromAuth = auth.token || auth.accessToken;
+    const tokenFromHeader = headerAuth && headerAuth.startsWith('Bearer ')
+      ? headerAuth.slice(7)
+      : undefined;
+    const tokenFromQuery = query.token;
+
+    const token = tokenFromAuth || tokenFromHeader || tokenFromQuery;
+
     if (!token) {
       return next(new Error('Authentication error: No token provided'));
     }
